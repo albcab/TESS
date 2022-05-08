@@ -1,0 +1,340 @@
+Loading German credit data...
+Setting up German credit logistic horseshoe model...
+Using 2 concatenated flows each w/ hidden layers=[51, 51]
+Centering model w/ 1000 iter and 10 atoms...
+Running 4 chains of NUTS for 1000 iter w/ 1000 warmup (tuning) iter...
+
+                mean       std    median      5.0%     95.0%     n_eff     r_hat
+   beta[0]      0.38      0.87      0.41     -1.00      1.90   3212.17      1.00
+   beta[1]      1.13      0.56      1.05      0.28      1.98   2265.86      1.00
+   beta[2]     -1.27      0.58     -1.19     -2.14     -0.36   2772.13      1.00
+   beta[3]      1.10      0.55      1.02      0.28      1.96   2269.39      1.00
+   beta[4]     -0.45      0.84     -0.47     -1.81      1.01   2917.18      1.00
+   beta[5]      0.96      0.57      0.86      0.09      1.76   2288.63      1.00
+   beta[6]      0.67      0.70      0.61     -0.29      1.96   1898.55      1.00
+   beta[7]      0.67      0.69      0.63     -0.34      1.92   2246.80      1.00
+   beta[8]      0.03      0.81      0.03     -1.43      1.33   3628.22      1.00
+   beta[9]     -0.70      0.68     -0.64     -1.92      0.22   2133.90      1.00
+  beta[10]      0.39      0.83      0.39     -1.15      1.63   3093.37      1.00
+  beta[11]      0.82      0.58      0.72      0.06      1.72   2136.85      1.00
+  beta[12]     -0.44      0.84     -0.44     -1.83      1.01   3010.65      1.00
+  beta[13]     -0.05      0.84     -0.05     -1.49      1.34   3664.17      1.00
+  beta[14]      0.32      0.75      0.29     -0.86      1.67   2911.54      1.00
+  beta[15]      0.70      0.75      0.69     -0.39      2.03   1476.72      1.00
+  beta[16]     -0.87      0.53     -0.77     -1.63     -0.09   2885.11      1.00
+  beta[17]      0.88      0.61      0.79      0.06      1.85   2667.77      1.00
+  beta[18]     -0.68      0.69     -0.64     -2.02      0.27   2015.55      1.00
+  beta[19]     -0.75      0.78     -0.73     -2.15      0.44   1719.68      1.00
+  beta[20]     -0.53      0.75     -0.51     -1.84      0.67   2412.18      1.00
+  beta[21]      0.32      0.81      0.32     -1.02      1.71   2204.40      1.00
+  beta[22]      0.05      0.85      0.06     -1.32      1.54   3860.98      1.00
+  beta[23]     -0.01      0.81     -0.02     -1.34      1.38   3538.40      1.00
+  beta[24]     -0.04      0.81     -0.03     -1.33      1.39   3691.53      1.00
+  lamda[0]      0.86      1.18      0.44      0.00      2.16   1479.01      1.00
+  lamda[1]      2.30      1.46      1.91      0.43      4.24   2363.00      1.00
+  lamda[2]      2.88      1.68      2.50      0.49      5.05   2553.39      1.00
+  lamda[3]      2.00      1.37      1.63      0.34      3.76   2279.56      1.00
+  lamda[4]      0.82      1.07      0.44      0.00      2.09   3821.56      1.00
+  lamda[5]      1.47      1.23      1.12      0.17      2.93   2801.55      1.00
+  lamda[6]      0.87      1.03      0.56      0.00      2.05   2817.76      1.00
+  lamda[7]      0.92      1.08      0.59      0.00      2.15   2851.38      1.00
+  lamda[8]      0.33      0.64      0.12      0.00      0.86   4059.82      1.00
+  lamda[9]      0.85      0.97      0.55      0.00      2.03   2908.12      1.00
+ lamda[10]      0.68      1.07      0.33      0.00      1.67    859.21      1.00
+ lamda[11]      1.08      1.00      0.77      0.00      2.30   2733.83      1.00
+ lamda[12]      0.70      0.95      0.37      0.00      1.82   3527.08      1.00
+ lamda[13]      0.34      0.62      0.13      0.00      0.84   3483.90      1.00
+ lamda[14]      0.41      0.69      0.18      0.00      1.06   3275.59      1.00
+ lamda[15]      1.06      1.16      0.73      0.00      2.46   3152.74      1.00
+ lamda[16]      1.18      1.06      0.88      0.08      2.43   2884.74      1.00
+ lamda[17]      1.24      1.14      0.94      0.00      2.52   2941.48      1.00
+ lamda[18]      1.01      1.13      0.68      0.00      2.40   2316.87      1.00
+ lamda[19]      1.20      1.23      0.86      0.00      2.72   2067.45      1.00
+ lamda[20]      0.64      0.83      0.37      0.00      1.55   2677.33      1.00
+ lamda[21]      0.50      0.74      0.24      0.00      1.30   3096.93      1.00
+ lamda[22]      0.46      0.74      0.19      0.00      1.24   3999.65      1.00
+ lamda[23]      0.34      0.60      0.12      0.00      0.90   3622.78      1.00
+ lamda[24]      0.31      0.58      0.11      0.00      0.81   3728.76      1.00
+       tau      0.47      0.21      0.43      0.20      0.78   1516.31      1.00
+
+Number of divergences: 25
+Runtime for NUTS 0 days 00:00:42.741631
+Running 4 chains of NeuTra for 1000 iter w/ 5000 precond iter and 1000 warmup (tuning) iter...
+
+                            mean       std    median      5.0%     95.0%     n_eff     r_hat
+ auto_shared_latent[0]     -0.05      1.47     -0.11     -2.61      2.32   1811.54      1.00
+ auto_shared_latent[1]      0.07      1.12      0.05     -1.69      1.93   2339.14      1.00
+ auto_shared_latent[2]      0.70      1.54      0.70     -1.96      3.05   2403.12      1.00
+ auto_shared_latent[3]     -0.39      1.59     -0.41     -3.03      2.25   2484.38      1.00
+ auto_shared_latent[4]      0.10      1.37      0.17     -2.13      2.18   2019.00      1.00
+ auto_shared_latent[5]     -0.63      1.58     -0.56     -3.28      1.62   1729.66      1.00
+ auto_shared_latent[6]     -1.33      1.27     -1.20     -3.53      0.48   1682.71      1.00
+ auto_shared_latent[7]      1.46      1.34      1.20     -0.39      3.51   1593.19      1.00
+ auto_shared_latent[8]     -0.07      1.03      0.06     -1.70      1.51   1688.29      1.00
+ auto_shared_latent[9]      1.55      1.28      1.44     -0.26      3.87   1807.11      1.00
+auto_shared_latent[10]     -0.13      1.06     -0.14     -1.89      1.64   2348.92      1.00
+auto_shared_latent[11]      0.64      1.47      0.63     -1.88      3.01   2725.47      1.00
+auto_shared_latent[12]      0.12      1.22      0.10     -1.93      2.16   2566.08      1.00
+auto_shared_latent[13]      0.53      1.25      0.34     -1.27      2.48   1416.29      1.00
+auto_shared_latent[14]      0.39      1.16      0.40     -1.59      2.28   2365.35      1.00
+auto_shared_latent[15]      1.02      1.33      1.04     -1.54      2.78   1933.84      1.00
+auto_shared_latent[16]      0.12      1.48      0.10     -2.44      2.44   3419.59      1.00
+auto_shared_latent[17]      0.08      1.05     -0.00     -1.59      1.82   2153.35      1.00
+auto_shared_latent[18]     -0.46      1.08     -0.51     -2.09      1.36   1836.28      1.00
+auto_shared_latent[19]      0.43      1.01      0.27     -1.02      2.07   2004.93      1.00
+auto_shared_latent[20]      0.72      1.26      0.70     -1.42      2.74   2189.44      1.00
+auto_shared_latent[21]     -0.30      1.17     -0.46     -2.31      1.39   1942.07      1.00
+auto_shared_latent[22]     -0.19      0.80     -0.08     -1.38      1.08   2625.64      1.00
+auto_shared_latent[23]     -1.59      1.36     -1.72     -3.78      0.57   2218.17      1.00
+auto_shared_latent[24]      0.00      1.63      0.04     -2.69      2.67   2346.93      1.00
+auto_shared_latent[25]     -2.59      3.32     -1.92     -7.56      2.09   1227.93      1.00
+auto_shared_latent[26]     -3.31      3.88     -2.64     -9.31      2.25   1707.08      1.00
+auto_shared_latent[27]     -1.74      2.81     -1.16     -5.77      2.40   1597.41      1.00
+auto_shared_latent[28]     -2.48      3.55     -1.69     -7.95      2.31   1625.80      1.00
+auto_shared_latent[29]     -2.56      4.16     -1.49     -8.96      2.99   1169.78      1.00
+auto_shared_latent[30]     -0.51      2.77      0.20     -3.82      3.05    881.26      1.00
+auto_shared_latent[31]      0.23      2.58      0.79     -3.43      3.77    886.79      1.00
+auto_shared_latent[32]      0.39      1.75      0.60     -1.48      2.66    759.77      1.00
+auto_shared_latent[33]      0.18      1.40      0.19     -1.92      2.43   1342.71      1.01
+auto_shared_latent[34]      0.33      2.44      0.91     -3.11      3.59   1223.21      1.00
+auto_shared_latent[35]     -2.42      3.74     -1.71     -7.39      3.30    980.68      1.00
+auto_shared_latent[36]     -4.05      4.22     -3.29     -9.86      2.18   1239.74      1.00
+auto_shared_latent[37]     -1.02      2.81     -0.33     -5.03      2.82   1580.85      1.00
+auto_shared_latent[38]     -0.33      1.56     -0.20     -2.49      2.12   1484.35      1.00
+auto_shared_latent[39]     -1.39      2.89     -0.70     -5.46      2.51   1121.86      1.00
+auto_shared_latent[40]     -2.08      3.61     -1.32     -6.68      2.75    985.21      1.00
+auto_shared_latent[41]     -2.84      3.51     -2.15     -8.17      2.11   1436.16      1.00
+auto_shared_latent[42]     -1.14      2.65     -0.55     -5.06      2.42   1033.95      1.00
+auto_shared_latent[43]     -2.00      4.06     -1.13     -7.39      3.11    949.44      1.00
+auto_shared_latent[44]      0.89      1.35      0.86     -1.25      2.97   1653.78      1.00
+auto_shared_latent[45]     -2.07      3.25     -1.27     -6.77      2.41   1536.18      1.00
+auto_shared_latent[46]     -0.50      1.41     -0.45     -2.54      2.05   1390.15      1.00
+auto_shared_latent[47]      1.44      0.93      1.42     -0.00      3.00   1732.70      1.00
+auto_shared_latent[48]     -0.32      2.03     -0.30     -3.79      2.85   1248.76      1.00
+auto_shared_latent[49]     -1.50      3.44     -0.65     -6.43      3.23   1525.89      1.00
+auto_shared_latent[50]      3.49      2.48      3.15     -0.36      7.24   1118.61      1.00
+               beta[0]      0.37      0.89      0.41     -1.11      1.82   2458.14      1.00
+               beta[1]      1.15      0.58      1.05      0.27      2.02   2627.53      1.00
+               beta[2]     -1.27      0.57     -1.19     -2.13     -0.39   2796.44      1.00
+               beta[3]      1.09      0.57      1.00      0.20      1.89   2251.90      1.00
+               beta[4]     -0.49      0.81     -0.49     -1.72      0.99   2519.24      1.00
+               beta[5]      0.96      0.56      0.86      0.14      1.78   2074.21      1.00
+               beta[6]      0.65      0.67      0.61     -0.28      1.89   1800.71      1.00
+               beta[7]      0.68      0.72      0.63     -0.33      2.05   2451.78      1.00
+               beta[8]      0.03      0.82      0.02     -1.40      1.36   3724.32      1.00
+               beta[9]     -0.65      0.69     -0.60     -1.86      0.35   2438.70      1.00
+              beta[10]      0.36      0.81      0.36     -1.02      1.70   2633.85      1.00
+              beta[11]      0.83      0.59      0.73      0.03      1.72   1814.11      1.00
+              beta[12]     -0.45      0.78     -0.46     -1.72      0.86   2772.91      1.00
+              beta[13]     -0.07      0.86     -0.06     -1.48      1.40   3349.11      1.00
+              beta[14]      0.34      0.76      0.32     -0.90      1.65   2805.39      1.00
+              beta[15]      0.71      0.72      0.68     -0.42      1.92   2168.94      1.00
+              beta[16]     -0.87      0.55     -0.76     -1.68     -0.08   2034.75      1.00
+              beta[17]      0.88      0.62      0.79      0.07      1.90   2098.19      1.00
+              beta[18]     -0.69      0.73     -0.65     -1.90      0.41   2118.65      1.00
+              beta[19]     -0.78      0.71     -0.75     -2.11      0.14   1977.28      1.00
+              beta[20]     -0.53      0.76     -0.51     -1.85      0.61   2329.25      1.00
+              beta[21]      0.36      0.79      0.35     -0.87      1.76   2672.13      1.00
+              beta[22]      0.03      0.86      0.03     -1.41      1.42   3165.82      1.00
+              beta[23]     -0.01      0.82     -0.01     -1.26      1.44   2695.25      1.00
+              beta[24]     -0.04      0.83     -0.05     -1.36      1.41   2249.87      1.00
+              lamda[0]      0.84      1.14      0.42      0.00      2.25   3053.19      1.00
+              lamda[1]      2.25      1.46      1.88      0.50      4.28   2098.67      1.00
+              lamda[2]      2.82      1.64      2.47      0.59      5.07   2522.57      1.00
+              lamda[3]      2.01      1.37      1.65      0.29      3.73   1892.82      1.00
+              lamda[4]      0.84      1.02      0.49      0.00      2.13   3014.30      1.00
+              lamda[5]      1.43      1.13      1.09      0.20      2.90   2081.33      1.00
+              lamda[6]      0.86      0.99      0.57      0.00      2.00   2798.13      1.00
+              lamda[7]      0.93      1.13      0.60      0.00      2.16   2840.26      1.00
+              lamda[8]      0.34      0.61      0.12      0.00      0.91   3105.08      1.00
+              lamda[9]      0.83      0.94      0.55      0.00      1.99   2521.42      1.00
+             lamda[10]      0.62      0.92      0.30      0.00      1.62   3586.73      1.00
+             lamda[11]      1.08      1.06      0.76      0.00      2.35   2549.60      1.00
+             lamda[12]      0.72      0.96      0.40      0.00      1.78   3508.59      1.00
+             lamda[13]      0.32      0.58      0.12      0.00      0.82   3003.86      1.00
+             lamda[14]      0.39      0.65      0.16      0.00      0.99   3159.29      1.00
+             lamda[15]      1.12      1.16      0.82      0.00      2.58   2534.21      1.00
+             lamda[16]      1.17      1.02      0.86      0.05      2.50   2179.46      1.00
+             lamda[17]      1.23      1.13      0.92      0.00      2.66   3051.02      1.00
+             lamda[18]      1.02      1.15      0.67      0.00      2.35   2461.51      1.00
+             lamda[19]      1.22      1.20      0.91      0.00      2.69   2172.47      1.00
+             lamda[20]      0.64      0.88      0.36      0.00      1.60   2930.77      1.00
+             lamda[21]      0.51      0.77      0.25      0.00      1.27   3139.66      1.00
+             lamda[22]      0.47      0.73      0.20      0.00      1.24   3544.56      1.00
+             lamda[23]      0.32      0.57      0.11      0.00      0.87   3326.43      1.00
+             lamda[24]      0.29      0.55      0.10      0.00      0.78   3320.10      1.00
+                   tau      0.48      0.22      0.44      0.19      0.78   1061.19      1.00
+
+Number of divergences: 45
+Runtime for NeuTra 0 days 00:01:15.697225
+Running 4 chains of ATESS for 1000 iter w/ 1000 precond iter, 5 warmup iter of 1000 each...
+transforms: [('batch', {'batch_dims': (1,)})]
+[[4.33397906e+05 6.13473280e+08 2.21395797e+05 2.35563672e+05]
+ [6.28018688e+05 1.04695224e+08 1.66095281e+05 4.14369125e+05]
+ [5.38413875e+05 2.95807260e+07 1.78281188e+05 1.59712578e+05]
+ ...
+ [7.67713135e+02 2.87653398e+04 7.12395081e+02 7.52223755e+02]
+ [7.67124573e+02 5.03297656e+04 7.10970642e+02 7.51474487e+02]
+ [7.66535889e+02 5.03044961e+04 7.09644409e+02 7.50741516e+02]]
+Loading German credit data...
+Setting up German credit logistic horseshoe model...
+Using 3 concatenated flows each w/ hidden layers=[51, 51, 51]
+Centering model w/ 1000 iter and 10 atoms...
+Running 4 chains of ATESS for 1000 iter w/ 1000 precond iter, 5 warmup iter of 1000 each...
+transforms: [('batch', {'batch_dims': (1,)})]
+[[4.8631672e+05 2.3412459e+05 4.9428512e+07 6.1629100e+05]
+ [3.3821919e+05 1.6109805e+05 6.2946660e+06 3.8172178e+05]
+ [2.6946403e+05 1.5075361e+05 1.5981526e+06 3.1330066e+05]
+ ...
+ [5.6625616e+02 6.7367792e+02 1.8976018e+03 5.4946942e+02]
+ [5.6570087e+02 6.7321460e+02 1.8952292e+03 5.4928381e+02]
+ [5.6515222e+02 6.7275476e+02 1.8928816e+03 5.4910284e+02]]
+Loading German credit data...
+Setting up German credit logistic horseshoe model...
+Using 3 concatenated flows each w/ hidden layers=[51, 51, 51]
+Centering model w/ 1000 iter and 10 atoms...
+Running 4 chains of ATESS for 1000 iter w/ 1000 precond iter, 5 warmup iter of 1000 each...
+Loading German credit data...
+Setting up German credit logistic horseshoe model...
+Using 3 concatenated flows each w/ hidden layers=[51, 51, 51]
+Centering model w/ 10000 iter and 10 atoms...
+Running 4 chains of ATESS for 1000 iter w/ 10000 precond iter, 5 warmup iter of 1000 each...
+Loading German credit data...
+Setting up German credit logistic horseshoe model...
+Using 3 concatenated flows each w/ hidden layers=[51, 51, 51]
+Centering model w/ 5000 iter and 10 atoms...
+Running 4 chains of ATESS for 1000 iter w/ 5000 precond iter, 5 warmup iter of 1000 each...
+transforms: [('batch', {'batch_dims': (1,)})]
+[[4.8631672e+05 2.3412459e+05 4.9428512e+07 6.1629100e+05]
+ [3.3821919e+05 1.6109805e+05 6.2946660e+06 3.8172178e+05]
+ [2.6946403e+05 1.5075361e+05 1.5981526e+06 3.1330066e+05]
+ ...
+ [1.2032111e+04 2.5804480e+04 7.6356482e+02 1.6419654e+04]
+ [1.1938331e+04 2.9273412e+04 1.0299413e+03 2.1917281e+04]
+ [1.1191539e+04 2.4726031e+04 1.4316229e+03 2.7448025e+04]]
+Loading German credit data...
+Setting up German credit logistic horseshoe model...
+Using 3 concatenated flows each w/ hidden layers=[51, 51, 51]
+Centering model w/ 10000 iter and 10 atoms...
+Running 4 chains of ATESS for 1000 iter w/ 10000 precond iter, 5 warmup iter of 1000 each...
+transforms: [('batch', {'batch_dims': (1,)})]
+[[4.8631672e+05 2.3412459e+05 4.9428512e+07 6.1629100e+05]
+ [4.3407200e+05 1.8314058e+05 3.9698344e+07 6.1021106e+05]
+ [3.9816144e+05 1.5319669e+05 3.2058922e+07 5.9868056e+05]
+ ...
+ [9.1003896e+03 7.7557654e+02 4.5370941e+02 3.7980291e+03]
+ [1.0002145e+04 1.4115955e+03 4.5366605e+02 1.1776841e+04]
+ [9.2620635e+03 1.6706667e+03 4.5362354e+02 1.5113127e+04]]
+Loading German credit data...
+Setting up German credit logistic horseshoe model...
+Using 3 concatenated flows each w/ hidden layers=[51, 51, 51]
+Centering model w/ 10000 iter and 10 atoms...
+Running 4 chains of ATESS for 1000 iter w/ 10000 precond iter, 5 warmup iter of 1000 each...
+transforms: [('batch', {'batch_dims': (1,)})]
+[[4.8631672e+05 2.3412459e+05 4.9428512e+07 6.1629100e+05]
+ [4.3407200e+05 1.8314058e+05 3.9698344e+07 6.1021106e+05]
+ [3.9816144e+05 1.5319669e+05 3.2058922e+07 5.9868056e+05]
+ ...
+ [9.1003896e+03 7.7557654e+02 4.5370941e+02 3.7980291e+03]
+ [1.0002145e+04 1.4115955e+03 4.5366605e+02 1.1776841e+04]
+ [9.2620635e+03 1.6706667e+03 4.5362354e+02 1.5113127e+04]]
+Loading German credit data...
+Setting up German credit logistic horseshoe model...
+Using 3 concatenated flows each w/ hidden layers=[51, 51, 51]
+Centering model w/ 10000 iter and 10 atoms...
+Running 4 chains of ATESS for 1000 iter w/ 10000 precond iter, 5 warmup iter of 1000 each...
+transforms: [('batch', {'batch_dims': (1,)})]
+[[4.8631672e+05 2.3412459e+05 4.9428512e+07 6.1629100e+05]
+ [4.3407200e+05 1.8314058e+05 3.9698344e+07 6.1021106e+05]
+ [3.9816144e+05 1.5319669e+05 3.2058922e+07 5.9868056e+05]
+ ...
+ [9.1003896e+03 7.7557654e+02 4.5370941e+02 3.7980291e+03]
+ [1.0002145e+04 1.4115955e+03 4.5366605e+02 1.1776841e+04]
+ [9.2620635e+03 1.6706667e+03 4.5362354e+02 1.5113127e+04]]
+Loading German credit data...
+Setting up German credit logistic horseshoe model...
+Using 10 concatenated flows each w/ hidden layers=[51, 51, 51]
+Centering model w/ 10000 iter and 10 atoms...
+Running 4 chains of ATESS for 1000 iter w/ 10000 precond iter, 5 warmup iter of 1000 each...
+transforms: [('batch', {'batch_dims': (1,)})]
+[[          inf 2.1380927e+11 1.0101206e+08 4.2360088e+13]
+ [          inf 1.5239162e+10 3.3963364e+07 2.2501725e+12]
+ [          inf 3.3540805e+09 1.5208279e+07 2.8342944e+11]
+ ...
+ [          inf 1.0375723e+05 1.1033221e+03 7.9385906e+05]
+ [          inf 1.0173513e+05 1.1246584e+03 7.9335475e+05]
+ [          inf 1.0337527e+05 1.1666587e+03 7.9283938e+05]]
+Loading German credit data...
+Setting up German credit logistic horseshoe model...
+Using 6 concatenated flows each w/ hidden layers=[51, 51, 51]
+Centering model w/ 10000 iter and 10 atoms...
+Loading German credit data...
+Setting up German credit logistic horseshoe model...
+Using 8 concatenated flows each w/ hidden layers=[51, 51, 51]
+Centering model w/ 10000 iter and 10 atoms...
+Running 4 chains of ATESS for 1000 iter w/ 10000 precond iter, 5 warmup iter of 1000 each...
+transforms: [('batch', {'batch_dims': (1,)})]
+[[1.6077378e+08 1.2786045e+09 1.5504227e+07 8.2885472e+08]
+ [6.8749528e+07 2.8999610e+08 6.6363380e+06 2.4051659e+08]
+ [3.3764288e+07 9.1442360e+07 3.4578980e+06 8.6995744e+07]
+ ...
+ [7.7476874e+02 1.4981317e+03 5.5213922e+04 1.1049912e+03]
+ [7.7460168e+02 1.4980895e+03 4.6485945e+04 1.1051248e+03]
+ [7.7443079e+02 1.4980422e+03 4.5367930e+04 1.1052744e+03]]
+Loading German credit data...
+Setting up German credit logistic horseshoe model...
+Using 2 concatenated flows each w/ hidden layers=[100, 100]
+Centering model w/ 10000 iter and 10 atoms...
+Running 4 chains of ATESS for 1000 iter w/ 10000 precond iter, 5 warmup iter of 1000 each...
+transforms: [('batch', {'batch_dims': (1,)})]
+[[6.8500431e+05 4.2026562e+05 1.5412832e+08 5.7851362e+05]
+ [5.8718338e+05 4.2101544e+05 1.0550897e+08 5.3265550e+05]
+ [5.1295772e+05 4.2120175e+05 7.3669288e+07 4.9941472e+05]
+ ...
+ [2.5934221e+03 3.5636975e+02 6.2818109e+02 5.9711465e+03]
+ [1.9886466e+03 3.5631384e+02 6.2831146e+02 7.7482651e+03]
+ [1.5745011e+03 3.5631418e+02 6.2844080e+02 9.6119365e+03]]
+Loading German credit data...
+Setting up German credit logistic horseshoe model...
+Using 2 concatenated flows each w/ hidden layers=[100, 100, 100, 100, 100, 100, 100, 100, 100, 100]
+Centering model w/ 10000 iter and 10 atoms...
+Running 4 chains of ATESS for 1000 iter w/ 10000 precond iter, 5 warmup iter of 1000 each...
+Loading German credit data...
+Setting up German credit logistic horseshoe model...
+Using 2 concatenated flows each w/ hidden layers=[51, 51, 51, 51, 51, 51, 51, 51, 51, 51]
+Centering model w/ 10000 iter and 10 atoms...
+Running 4 chains of ATESS for 1000 iter w/ 10000 precond iter, 5 warmup iter of 1000 each...
+transforms: [('batch', {'batch_dims': (1,)})]
+[[105688.06   133105.11   196261.78   192717.44  ]
+ [106917.44   131826.53   191390.34   191279.89  ]
+ [107682.31   128917.734  189261.84   186693.73  ]
+ ...
+ [ 22878.893    2024.0289   1183.5216   3082.362 ]
+ [ 26466.594    1552.6917   1538.0476   3393.0002]
+ [ 29769.691    1532.2949   1911.7212   2371.5017]]
+Loading German credit data...
+Setting up German credit logistic horseshoe model...
+Using 2 concatenated flows each w/ hidden layers=[51, 51, 51, 51, 51, 51, 51, 51, 51, 51]
+Centering model w/ 10000 iter and 10 atoms...
+Running 4 chains of ATESS for 1000 iter w/ 10000 precond iter, 5 warmup iter of 1000 each...
+transforms: [('batch', {'batch_dims': (1,)})]
+[[105688.06   133105.11   196261.78   192717.44  ]
+ [106917.44   131826.53   191390.34   191279.89  ]
+ [107682.31   128917.734  189261.84   186693.73  ]
+ ...
+ [ 22878.893    2024.0289   1183.5216   3082.362 ]
+ [ 26466.594    1552.6917   1538.0476   3393.0002]
+ [ 29769.691    1532.2949   1911.7212   2371.5017]]
+Loading German credit data...
+Setting up German credit logistic horseshoe model...
+Using 2 concatenated flows each w/ hidden layers=[51, 51, 51, 51, 51, 51, 51, 51, 51, 51]
+Centering model w/ 10000 iter and 10 atoms...
+Running 4 chains of ATESS for 1000 iter w/ 10000 precond iter, 5 warmup iter of 1000 each...
+transforms: [('batch', {'batch_dims': (1,)})]
+[[105688.06   133105.11   196261.78   192717.44  ]
+ [106917.44   131826.53   191390.34   191279.89  ]
+ [107682.31   128917.734  189261.84   186693.73  ]
+ ...
+ [ 22878.893    2024.0289   1183.5216   3082.362 ]
+ [ 26466.594    1552.6917   1538.0476   3393.0002]
+ [ 29769.691    1532.2949   1911.7212   2371.5017]]
