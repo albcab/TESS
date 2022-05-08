@@ -5,14 +5,13 @@ import numpy as np
 
 import jax
 from jax.flatten_util import ravel_pytree
-import jax.lax.linalg as linalg
 import jax.numpy as jnp
 from jax.example_libraries import stax
 
 from jax.experimental.host_callback import id_print
 
 from mcmc_utils import inference_loop
-from nn_utils import optimize, Dropout
+from nn_utils import optimize, affine_iaf_masks, MaskedDense, Dropout
 
 import jaxopt
 from optax import GradientTransformation
@@ -32,7 +31,7 @@ class SamplingAlgorithm(NamedTuple):
 
 class SliceState(NamedTuple):
     position: PyTree
-    loglikelihood: PyTree
+    logprob: PyTree
 
 class SliceInfo(NamedTuple):
     momentum: PyTree
@@ -43,24 +42,8 @@ class SliceInfo(NamedTuple):
 class elliptical_slice:
     def __new__(
         cls,
-        # loglikelihood_fn: Callable,
         logprob_fn: Callable, d: int,
-        # cov_matrix: Array,
     ) -> SamplingAlgorithm:
-        
-        # def init_fn(position: PyTree):
-        #     loglikelihood = loglikelihood_fn(position)
-        #     return SliceState(position, loglikelihood)
-
-        # n = cov_matrix.shape[0]
-        # cov_matrix_sqrt = linalg.cholesky(cov_matrix)
-        # def momentum_generator(rng_key, position):
-        #     _, unravel_fn = ravel_pytree(position)
-        #     momentum = jnp.dot(cov_matrix_sqrt, jax.random.normal(rng_key, shape=(n,)))
-        #     return unravel_fn(momentum)
-        # def step_fn(rng_key: PRNGKey, state: SliceState):
-        #     proposal_generator = elliptical_proposal(loglikelihood_fn, momentum_generator)
-        #     return proposal_generator(rng_key, state)
         
         def init_fn(position: PyTree):
             return SliceState(position, 0)
@@ -75,6 +58,7 @@ class elliptical_slice:
                 lambda u, v: (u, v), lambda x, v: (x, v)
             )
             return proposal_generator(rng_key, state)
+
         return SamplingAlgorithm(init_fn, step_fn)
 
 
@@ -82,16 +66,15 @@ class atransp_elliptical_slice:
     def __new__(
         cls,
         logprob_fn: Callable,
-        # T: Callable, T_inv: Callable,
         optim: Optim, d: int, n_flow: int,
-        hidden_dims: Sequence[int], non_linearity: Callable = stax.Tanh,
-        # Psi: Callable,
+        hidden_dims: Sequence[int], non_linearity: Callable = stax.Tanh, norm: bool = False
     ) -> SamplingAlgorithm:
         
         layers = []
         for hd in hidden_dims:
             layers.append(stax.Dense(hd))
-            # layers.append(stax.BatchNorm(axis=0))
+            if norm:
+                layers.append(stax.BatchNorm(axis=0))
             # layers.append(Dropout(1/3))
             layers.append(non_linearity)
         layers.append(stax.Dense(2 * d))
@@ -144,7 +127,6 @@ class atransp_elliptical_slice:
             v = jax.random.normal(k, (d,))
             x, v, ldj = T(u, v, param, k, mode='train')
             return -logprob_fn(x) + .5 * jnp.dot(v, v) - ldj
-        # kld0 = lambda param, U, K: jnp.sum(jax.vmap(pi_tilde, (None, 0, 0))(param, U, K))
 
         def P(param, u, k):
             v = jax.random.normal(k, (d,))
@@ -152,12 +134,10 @@ class atransp_elliptical_slice:
             x, v, ldj = T(u, v, param, k, mode='train')
             u, _ = ravel_pytree(u)
             return -.5 * jnp.dot(u, u) + lp_v - logprob_fn(x) + .5 * jnp.dot(v, v) - ldj
-        # check0 = lambda param, U, K: jnp.var(jax.vmap(P, (None, 0, 0))(param, U, K))
 
         def init_fn(
             rng: PRNGKey, position: PyTree, 
-            # n_atoms: int = 100, n_iter: int = 1000
-            batch_size: int = 1000, batch_iter: int = 5, tol: float = 1e-0
+            batch_size: int = 1000, batch_iter: int = 5, tol: float = 1e-0, maxiter : int = 1e6,
         ):
             n_batch = int(batch_size / batch_iter)
             def kld0(param, k, U):
@@ -168,31 +148,10 @@ class atransp_elliptical_slice:
                 return jnp.var(jax.vmap(jax.vmap(lambda u, k: P(param, u, k)))(U, K))
 
             _, unraveler_fn = ravel_pytree(position)
-            # if isinstance(optim, GradientTransformation):
-            #     solver = jaxopt.OptaxSolver(kld0, optim, maxiter=n_iter, tol=1e-2)
-            # else:
-            #     solver = optim(kld0, maxiter=n_iter, tol=1e-2)
             ku, ko = jax.random.split(rng)
-
-            # U = jax.vmap(unraveler_fn)(jax.random.normal(ku, shape=(n_atoms, d)))
-            # V = jax.random.normal(kv, shape=(n_atoms, d))
-            # V = jax.random.normal(kv, shape=(ITER, int(n_atoms / ITER), d))
             U = jax.vmap(jax.vmap(unraveler_fn))(jax.random.normal(ku, shape=(batch_iter, n_batch, d)))
-
-            # def solver_iter(carry, _):
-            #     param, state = solver.update(*carry, U=U, V=V)
-            #     return (param, state), state.error
             param = param_init(ko, (d,))[1]
-            # (param, _), err = jax.lax.scan(solver_iter, 
-            #     (param, solver.init_state(param, U=U, V=V)),
-            #     jnp.arange(n_iter))
-            # # param, sstate = solver.run(param_init(ks, (d,))[1], U=U, V=V)
-            # param, err = optimize(param, solver, n_iter, U, V)
-
-            # K = jax.random.split(ks, n_atoms)
-            # K = jax.vmap(lambda k: jax.random.split(k, int(n_atoms / ITER)))(jax.random.split(ks, ITER))
-            # n_iter = int(n_iter / ITER)
-            param, err = optimize(param, kld0, check0, optim, tol, ko, U)
+            param, err = optimize(param, kld0, check0, optim, tol, maxiter, ko, U)
             return SliceState(position, 0), param, err
 
         def slice_fn(p, m):
@@ -211,7 +170,6 @@ class atransp_elliptical_slice:
             u, v, nldj = T_inv(x, v, param, k, mode='train')
             u = ravel_pytree(u)[0]
             return .5 * jnp.dot(u, u) + .5 * jnp.dot(v, v) + nldj
-        kld_warm = lambda param, X, K: jnp.sum(jax.vmap(phi_tilde, (None, 0, 0))(param, X, K))
 
         def Z(param, x, k):
             v = jax.random.normal(k, (d,))
@@ -219,11 +177,11 @@ class atransp_elliptical_slice:
             u, v, nldj = T_inv(x, v, param, k, mode='train')
             u = ravel_pytree(u)[0]
             return logprob_fn(x) + lp_v + .5 * jnp.dot(u, u) + .5 * jnp.dot(v, v) + nldj
-        check = lambda param, X, K: jnp.var(jax.vmap(Z, (None, 0, 0))(param, X, K))
         
         def warm_fn(
             rng_key: PRNGKey, state: SliceState, param: PyTree, 
-            n_epoch: int = 10, batch_size: int = 1000, batch_iter: int = 10, tol: float = 1e-0#n_iter: int = 1000,
+            n_epoch: int = 10, batch_size: int = 1000, batch_iter: int = 10, 
+            tol: float = 1e-0, maxiter: int = 1e6,
         ):
             n_batch = int(batch_size / batch_iter)
             def kld_warm(param, k, X):
@@ -233,75 +191,85 @@ class atransp_elliptical_slice:
                 K = jax.vmap(lambda ki: jax.random.split(ki, n_batch))(jax.random.split(k, batch_iter))
                 return jnp.var(jax.vmap(jax.vmap(lambda x, k: Z(param, x, k)))(X, K))
 
-            # states, info = inference_loop(rng_key, state, step_fn, batch_size, param)
-            # X = states.position
-            # V = info.momentum
-            # param, err = optimize(param, kld_warm, optim, n_iter, X, V)
-            # error = [err]
-            # state = jax.tree_map(lambda x: x[-1], states)
-            # for e in range(n_epoch-1):
-            #     new_states, new_info = inference_loop(rng_key, state, step_fn, batch_size, param)
-            #     states = jax.tree_map(lambda x, y: jnp.concatenate([x, y]), states, new_states)
-            #     info = jax.tree_map(lambda x, y: jnp.concatenate([x, y]), info, new_info)
-            #     X = states.position
-            #     V = info.momentum
-            #     param, err = optimize(param, kld_warm, optim, n_iter, X, V)
-            #     error.append(err)
-            #     state = jax.tree_map(lambda x: x[-1], states)
-            # return (state, param), err
-
-            # if isinstance(optim, GradientTransformation):
-            #     solver = jaxopt.OptaxSolver(kld_warm, optim, maxiter=n_iter, tol=1e-2)
-            # else:
-            #     solver = optim(kld_warm, maxiter=n_iter, tol=1e-2)
-
             rng_key, ks, kc = jax.random.split(rng_key, 3)
             states, info = inference_loop(ks, state, step_fn, batch_size, param)
             X = jax.tree_map(lambda x: jax.random.choice(kc, x, (batch_iter, n_batch)), states.position)
 
             def one_epoch(carry, key):
-            #     state, param = carry
-            #     # id_print(param)
-            #     # keys = jax.random.split(key, batch_size)
-            #     # def get_batch(state, key):
-            #     #     state, info = step_fn(key, state, param)
-            #     #     return state, (state, info)
-            #     # state, (states, info) = jax.lax.scan(get_batch, state, keys)
-            #     states, info = inference_loop(key, state, step_fn, batch_size, param)
-            #     # id_print(info.subiter.mean())
-            #     X = states.position
-            #     V = info.momentum
-            #     # def solver_iter(carry, _):
-            #     #     param, state = solver.update(*carry, X=X, V=V)
-            #     #     return (param, state), state.error
-            #     # (param, _), err = jax.lax.scan(solver_iter, 
-            #     #     (param, solver.init_state(param, X=X, V=V)),
-            #     #     jnp.arange(n_iter))
-
-            #     # param, err = optimize(param, solver, n_iter, X, V)
-            #     K = jax.random.split(key, batch_size)
-            #     param, err = optimize(param, kld_warm, optim, n_iter, X, V, K)
-
-            #     # id_print(err)
-            #     return (state, param), err
-            # # param_ = param_init(rng_key, (d,))[1]
-            # rng_keys = jax.random.split(rng_key, n_epoch)
-            # return jax.lax.scan(one_epoch, (state, param), rng_keys)
-
                 state, param, X = carry
-                # K = jax.vmap(lambda k: jax.random.split(k, n_batch))(jax.random.split(key, batch_iter))
-                param, err = optimize(param, kld_warm, check, optim, tol, key, X)
+                param, err = optimize(param, kld_warm, check, optim, tol, maxiter, key, X)
                 ks, kc = jax.random.split(key)
                 states, info = inference_loop(ks, state, step_fn, batch_size, param)
                 X = jax.tree_map(lambda x, y: jax.random.choice(kc, jnp.concatenate([x, *y]), (batch_iter, n_batch)), states.position, X)
                 return (state, param, X), err
             rng_keys = jax.random.split(rng_key, n_epoch)
             (state, param, X), err = jax.lax.scan(one_epoch, (state, param, X), rng_keys[:-1])
-            # K = jax.vmap(lambda k: jax.random.split(k, n_batch))(jax.random.split(rng_keys[-1], batch_iter))
-            param, err_ = optimize(param, kld_warm, check, optim, tol, rng_keys[-1], X)
-            return (state, param), None #jnp.vstack([err.reshape(n_epoch-1, -1), err_.ravel()])
+            param, err_ = optimize(param, kld_warm, check, optim, tol, maxiter, rng_keys[-1], X)
+            return (state, param), jnp.hstack([err, err_])
         
         return SamplingAlgorithm(init_fn, step_fn), warm_fn
+
+
+class neutra:
+    def __new__(
+        cls,
+        logprob_fn: Callable,
+        optim: Optim, d: int, n_flow: int,
+        n_hidden: Sequence[int], non_linearity: Callable = stax.Elu,
+    ) -> SamplingAlgorithm:
+
+        masks = affine_iaf_masks(d, len(n_hidden))
+        layers = []
+        for mask in masks[:-1]:
+            layers.append(MaskedDense(mask))
+            layers.append(non_linearity)
+        layers.append(MaskedDense(masks[-1]))
+        param_init_, Psi_ = stax.serial(*layers)
+        def param_init(key, shape):
+            keys = jax.random.split(key, n_flow)
+            return None, jax.vmap(lambda k: param_init_(k, shape)[1])(keys)
+        Psi = lambda param, u: Psi_(param, u).reshape(2, -1)
+
+        def T(u, param):
+            u, unravel_fn = ravel_pytree(u)
+            def flow_iter(carry, param):
+                u, ldj = carry
+                psi = Psi(param, u)
+                x = jnp.exp(psi[1]) * u + psi[0]
+                x = jax.tree_util.tree_map(lambda x: x[::-1], x)
+                ldj += jnp.sum(psi[1])
+                return (x, ldj), None
+            (x, ldj), _ = jax.lax.scan(flow_iter, (u, 0.), param)
+            x = jax.tree_util.tree_map(lambda x: x[::-1], x)
+            return unravel_fn(x), ldj
+
+        def pi_tilde(param, u):
+            x, ldj = T(u, param)
+            return -logprob_fn(x) - ldj
+        kld = lambda param, k, U: jnp.sum(jax.vmap(pi_tilde, (None, 0))(param, U))
+
+        def P(param, u, k):
+            x, ldj = T(u, param)
+            u, _ = ravel_pytree(u)
+            return -.5 * jnp.dot(u, u) - logprob_fn(x) - ldj
+        check = lambda param, k, U: jnp.var(jax.vmap(jax.vmap(lambda u: P(param, u, k)))(U))
+
+        def init_fn(
+            rng: PRNGKey, position: PyTree, 
+            batch_size: int = 1000, batch_iter: int = 5, tol: float = 1e-0, maxiter : int = 1e6,
+        ):
+            _, unraveler_fn = ravel_pytree(position)
+            ku, kp = jax.random.split(rng)
+
+            n_batch = int(batch_size / batch_iter)
+            U = jax.vmap(jax.vmap(unraveler_fn))(jax.random.normal(ku, shape=(batch_iter, n_batch, d)))
+
+            init_param = param_init(kp, (d,))[1]
+            param, err = optimize(init_param, kld, check, optim, tol, maxiter, kp, U)
+            pullback_fn = lambda u: -pi_tilde(param, u)
+            return pullback_fn, param, err
+
+        return init_fn
 
 
 def ellipsis2(p, m, theta, mu=0.):

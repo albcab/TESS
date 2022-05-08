@@ -62,50 +62,30 @@ def Dropout(rate):
 #     # param, sstate = solver.run(init_param, *args)
 #     # return param, sstate.iter_num
 
-# def optimize(init_param, loss, optim, n_iter, *args):
-def optimize(init_param, loss, check, optim, tol, key, *args):
+def optimize(init_param, loss, check, optim, tol, maxiter, key, *args):
     opt_state = optim.init(init_param)
 
-    # def step(carry, _):
-    #     params, opt_state = carry
-    #     loss_value, grads = jax.value_and_grad(loss)(params, *args)
-    #     updates, opt_state_ = optim.update(grads, opt_state, params)
-    #     params_ = optax.apply_updates(params, updates)
-    #     return jax.lax.cond(
-    #         jnp.isfinite(loss_value) & jnp.isfinite(jax.flatten_util.ravel_pytree(grads)[0]).all(),
-    #         lambda _: ((params_, opt_state_), loss_value),
-    #         lambda _: ((params, opt_state), jnp.nan),
-    #         None,
-    #     )
-    # (param, _), err = jax.lax.scan(step, (init_param, opt_state), jnp.arange(n_iter))
-    # return param, err
-
-    # def step(carry, _):
     def while_fn(bool_carry):
-        _, prev_var, carry = bool_carry
-        # args = arg_gn(batch, params)
+        _, carry = bool_carry
         def step_epoch(carry, arg):
-            k, params, opt_state = carry
+            k, i, params, opt_state = carry
             k, ki = jrnd.split(k)
             loss_value, grads = jax.value_and_grad(loss)(params, ki, *arg)
             updates, opt_state_ = optim.update(grads, opt_state, params)
             params_ = optax.apply_updates(params, updates)
             return jax.lax.cond(
                 jnp.isfinite(loss_value) & jnp.isfinite(jax.flatten_util.ravel_pytree(grads)[0]).all(),
-                lambda _: ((k, params_, opt_state_), loss_value),
-                lambda _: ((k, params, opt_state), jnp.nan),
+                lambda _: ((k, i+1, params_, opt_state_), loss_value),
+                lambda _: ((k, i+1, params, opt_state), jnp.nan),
                 None,
             )
-        (key, params, state), loss_value = jax.lax.scan(step_epoch, carry, args)
-        # avg_var = jnp.mean(jax.vmap(lambda *arg: check(params, *arg))(*args))
-        avg_var = check(params, key, *args)
-        # id_print(avg_var)
-        stop = (avg_var >= tol) & (jnp.abs(avg_var - prev_var) >= 1e-6)
-        return stop, avg_var, (key, params, state)
-        # return jax.lax.scan(step_epoch, carry, args)
-    # (param, _), err = jax.lax.scan(step, (init_param, opt_state), jnp.arange(n_iter))
-    *_, (_, param, _) = jax.lax.while_loop(lambda c: c[0], while_fn, (True, 0., (key, init_param, opt_state)))
-    return param, None#err
+        (key, i, params, state), loss_value = jax.lax.scan(step_epoch, carry, args)
+        var = check(params, key, *args)
+        # id_print(var)
+        return var, (key, i, params, state)
+    stop_fn = lambda c: (c[0] >= tol) & (c[1][1] < maxiter) 
+    var, (*_, param, _) = jax.lax.while_loop(stop_fn, while_fn, (1e6, (key, 0, init_param, opt_state)))
+    return param, var
 
 
     

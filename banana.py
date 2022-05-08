@@ -11,26 +11,22 @@ from distributions import Banana
 from exec import run_atess, run_neutra, run_nuts
 
 from jax.config import config
-config.update("jax_debug_nans", True)
+# config.update("jax_debug_nans", True)
 config.update("jax_enable_x64", True)
 
 
 N_PARAM = 2
-SEED = 0
 
-def main():
+def main(args):
 
     print("Setting up Banana density...")
     dist = Banana()
 
-    n_warm = 1000
-    n_iter = 1000
-    n_chain = 4
-    print(f"Sampling {n_chain} chains for {n_iter} iterations...")
-    ksam, kinit = jrnd.split(jrnd.PRNGKey(SEED))
+    [n_chain, n_warm, n_iter] = args.sampling_param
+    ksam, kinit = jrnd.split(jrnd.PRNGKey(args.seed))
     dist.initialize_model(kinit, n_chain)
 
-    print(f"\nRunning NUTS w/ {n_warm} warmup (tuning) iter...")
+    print(f"\nNUTS w/ {n_chain} chains - {n_warm} warmup - {n_iter} samples...")
     tic1 = pd.Timestamp.now()
     run_nuts(ksam, dist.logprob_fn, dist.init_params, 
         n_warm, n_iter, n_chain)
@@ -42,83 +38,103 @@ def main():
     #     boundaries_and_scales={1000: .1, 4000: .1})
     schedule = 1e-3
     optim = optax.adam(schedule)
-    n_epochs = 5
-    batch_size = 10000
-    n_atoms = 4096
-    vi_iter = 10
-    print(f"\nUsing linear learning rate schedule w/ {n_atoms} pre-atoms, {vi_iter} iter, {n_epochs} warmup epochs of {batch_size} size each...")
+    maxiter = args.max_iter
+    print(f"\nUsing constant schedule {schedule} & maxiter {maxiter}.")
+
+    n_epochs = args.epoch
+    [batch_iter, batch_size] = args.batch_shape
+    tol = args.tol
 
     optim = optax.adam(schedule)
-    non_lin = stax.Tanh
+    non_lin = 'tanh'
     n_hidden = [N_PARAM] * 1
     n_flow = 2
-    print(f"Running ATESS w/ {n_flow} concatenated flows each w/ hidden layers={n_hidden} and Tanh nonlinearity...")
-    tic1 = pd.Timestamp.now()
+    norm = False
     samples = run_atess(ksam, dist.logprob_fn, dist.init_params,
-        optim, N_PARAM, n_flow, n_hidden, non_lin,
-        n_atoms, vi_iter, n_epochs, batch_size,
-        n_iter, n_chain,)
-    tic2 = pd.Timestamp.now()
-    print("Runtime for ATESS", tic2 - tic1)
+        optim, N_PARAM, n_flow, n_hidden, non_lin, norm,
+        n_iter, n_chain, n_epochs, batch_size, batch_iter, tol, maxiter)
 
     optim = optax.adam(schedule)
-    non_lin = stax.Tanh
+    non_lin = 'elu'
+    n_hidden = [N_PARAM] * 1
+    n_flow = 2
+    norm = False
+    samples = run_atess(ksam, dist.logprob_fn, dist.init_params,
+        optim, N_PARAM, n_flow, n_hidden, non_lin, norm,
+        n_iter, n_chain, n_epochs, batch_size, batch_iter, tol, maxiter)
+
+    optim = optax.adam(schedule)
+    non_lin = 'elu'
+    n_hidden = [N_PARAM] * 1
+    n_flow = 2
+    norm = True
+    samples = run_atess(ksam, dist.logprob_fn, dist.init_params,
+        optim, N_PARAM, n_flow, n_hidden, non_lin, norm,
+        n_iter, n_chain, n_epochs, batch_size, batch_iter, tol, maxiter)
+    
+    optim = optax.adam(schedule)
+    non_lin = 'tanh'
     n_hidden = [N_PARAM] * 2
     n_flow = 4
-    print(f"Running ATESS w/ {n_flow} concatenated flows each w/ hidden layers={n_hidden} and Tanh nonlinearity...")
-    tic1 = pd.Timestamp.now()
+    norm = False
     samples = run_atess(ksam, dist.logprob_fn, dist.init_params,
-        optim, N_PARAM, n_flow, n_hidden, non_lin,
-        n_atoms, vi_iter, n_epochs, batch_size,
-        n_iter, n_chain,)
-    tic2 = pd.Timestamp.now()
-    print("Runtime for ATESS", tic2 - tic1)
+        optim, N_PARAM, n_flow, n_hidden, non_lin, norm,
+        n_iter, n_chain, n_epochs, batch_size, batch_iter, tol, maxiter)
 
     optim = optax.adam(schedule)
-    non_lin = stax.Tanh
+    non_lin = 'elu'
+    n_hidden = [N_PARAM] * 2
+    n_flow = 4
+    norm = True
+    samples = run_atess(ksam, dist.logprob_fn, dist.init_params,
+        optim, N_PARAM, n_flow, n_hidden, non_lin, norm,
+        n_iter, n_chain, n_epochs, batch_size, batch_iter, tol, maxiter)
+
+    optim = optax.adam(schedule)
+    non_lin = 'tanh'
     n_hidden = [20] * 2
     n_flow = 1
-    print(f"Running ATESS w/ {n_flow} concatenated flows each w/ hidden layers={n_hidden} and Tanh nonlinearity...")
-    tic1 = pd.Timestamp.now()
+    norm = False
     samples = run_atess(ksam, dist.logprob_fn, dist.init_params,
+        optim, N_PARAM, n_flow, n_hidden, non_lin, norm,
+        n_iter, n_chain, n_epochs, batch_size, batch_iter, tol, maxiter)
+
+    optim = optax.adam(schedule)
+    non_lin = 'tanh'
+    n_hidden = [N_PARAM] * 2
+    n_flow = 4
+    run_neutra(ksam, dist.logprob_fn, dist.init_params, 
         optim, N_PARAM, n_flow, n_hidden, non_lin,
-        n_atoms, vi_iter, n_epochs, batch_size,
-        n_iter, n_chain,)
-    tic2 = pd.Timestamp.now()
-    print("Runtime for ATESS", tic2 - tic1)
-
-    schedule = optax.polynomial_schedule(1e-2, 1e-4, 1, 9000, 1000)
-    # schedule = optax.piecewise_constant_schedule(init_value=1e-2,
-    #     boundaries_and_scales={1000: .1, 4000: .1})
-    optim = optax.adam(schedule)
-    n_atoms = 4096
-    vi_iter = 5000
-    print(f"\nUsing schedule as NeuTra w/ {n_warm} warmup (tuning) iter w/ {n_atoms} atoms and {vi_iter} preconditioning iter...")
+        n_warm, n_iter, n_chain, True, batch_size, batch_iter, tol, maxiter)
 
     optim = optax.adam(schedule)
-    non_lin = stax.Tanh
+    non_lin = 'elu'
+    n_hidden = [N_PARAM] * 1
+    n_flow = 2
+    run_neutra(ksam, dist.logprob_fn, dist.init_params, 
+        optim, N_PARAM, n_flow, n_hidden, non_lin,
+        n_warm, n_iter, n_chain, True, batch_size, batch_iter, tol, maxiter)
+
+    optim = optax.adam(schedule)
+    non_lin = 'elu'
     n_hidden = [N_PARAM] * 2
     n_flow = 4
-    print(f"Running NeuTra w/ {n_flow} concatenated flows each w/ hidden layers={n_hidden} and Tanh nonlinearity...")
-    tic1 = pd.Timestamp.now()
     run_neutra(ksam, dist.logprob_fn, dist.init_params, 
-        optim, N_PARAM, n_flow, n_hidden, non_lin, 
-        n_atoms, vi_iter, n_warm, n_iter, n_chain, nuts=True)
-    tic2 = pd.Timestamp.now()
-    print("Runtime for NeuTra", tic2 - tic1)
-
-    optim = optax.adam(schedule)
-    non_lin = stax.Elu
-    n_hidden = [N_PARAM] * 2
-    n_flow = 4
-    print(f"Running NeuTra w/ {n_flow} concatenated flows each w/ hidden layers={n_hidden} and Elu nonlinearity...")
-    tic1 = pd.Timestamp.now()
-    run_neutra(ksam, dist.logprob_fn, dist.init_params, 
-        optim, N_PARAM, n_flow, n_hidden, non_lin, 
-        n_atoms, vi_iter, n_warm, n_iter, n_chain, nuts=True)
-    tic2 = pd.Timestamp.now()
-    print("Runtime for NeuTra", tic2 - tic1)
+        optim, N_PARAM, n_flow, n_hidden, non_lin,
+        n_warm, n_iter, n_chain, True, batch_size, batch_iter, tol, maxiter)
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument('-t', '--tol', type=float, default=1e-0)
+    parser.add_argument('-m', '--max-iter', type=int, default=1e6)
+    parser.add_argument('-e', '--epoch', type=int, default=10)
+    parser.add_argument('-b', '--batch-shape', type=int, nargs=2, default=[10, 10_000])
+    parser.add_argument(
+        "-s", "--sampling-param", type=int, nargs=2,
+        help="Sampling parameters [n_chain, n_warm, n_iter]",
+        default=[4, 1000, 1000]
+    )
+    args = parser.parse_args()
+    main(args)

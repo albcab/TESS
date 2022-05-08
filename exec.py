@@ -2,24 +2,25 @@ import jax
 import jax.numpy as jnp
 import jax.random as jrnd
 from jax.example_libraries import stax
-from jax.flatten_util import ravel_pytree
 
 from jax.experimental.host_callback import id_print
 
+import pandas as pd
+
 from numpyro.diagnostics import print_summary
 
-from kernels import atransp_elliptical_slice, elliptical_slice
+from kernels import atransp_elliptical_slice, elliptical_slice, neutra
 from mcmc_utils import inference_loop, inference_loop0
-from nn_utils import affine_iaf_masks, MaskedDense, optimize
 
 import blackjax
-import jaxopt
 
-from numpyro.infer import SVI, Trace_ELBO, MCMC, NUTS
-from numpyro.infer.reparam import NeuTraReparam
-from numpyro.infer.autoguide import AutoIAFNormal, AutoDiagonalNormal
-from numpyro.infer.initialization import init_to_feasible
 
+non_lins = {
+    'tanh': stax.Tanh,
+    'elu': stax.Elu,
+    'relu': stax.Relu,
+    'swish': stax.elementwise(jax.nn.swish),
+}
 
 ### ATESS no transformation
 
@@ -40,117 +41,71 @@ def run_ess(
     print_summary(samples)
     return samples
 
-
 ### ATESS
 
 def run_atess(
     rng_key, logprob_fn, init_params,
-    optim, n, n_flow, n_hidden, non_linearity,
-    n_atoms, vi_iter, n_epochs, batch_size,
+    optim, n, n_flow, n_hidden, non_linearity, norm,
     n_iter, n_chain,
+    n_epochs, batch_size, batch_iter, tol, maxiter,
 ):
-    atess, warm_fn = atransp_elliptical_slice(logprob_fn, optim, n, n_flow, n_hidden, non_linearity)
+    print(f"\nATESS w/ {n_flow} flows - hidden layers={n_hidden} - {non_linearity} nonlinearity - batch normalization? {norm},")
+    print(f"warmup & precond: {n_epochs} epochs - {batch_size} samples over {batch_iter} iter ({int(batch_size/batch_iter)} samples per iter) - tolerance {tol},")
+    print(f"sampling: {n_chain} chains - {n_iter} samples each...")
+
+    tic1 = pd.Timestamp.now()
+    atess, warm_fn = atransp_elliptical_slice(logprob_fn, optim, n, n_flow, n_hidden, non_lins[non_linearity], norm)
     def one_chain(ksam, init_x):
         kinit, kwarm, ksam = jrnd.split(ksam, 3)
-        state, param, err = atess.init(kinit, init_x)#, n_atoms, vi_iter)
-        id_print(jnp.zeros(1))
-        (state, param), error = warm_fn(kwarm, state, param, n_epochs, batch_size)#, vi_iter)
-        id_print(jnp.ones(1))
+        state, param, err = atess.init(kinit, init_x, batch_size, batch_iter, tol, maxiter)
+        id_print(err)
+        (state, param), error = warm_fn(kwarm, state, param, n_epochs, batch_size, batch_iter, tol, maxiter)
+        id_print(error)
         states, info = inference_loop(ksam, state, atess.step, n_iter, param)
         return states.position, info.subiter.mean(), (err, param, error)
     ksam = jrnd.split(rng_key, n_chain)
     samples, subiter, diagnose = jax.vmap(one_chain)(ksam, init_params)
+    tic2 = pd.Timestamp.now()
+
     print_summary(samples)
+    print("Runtime for ATESS", tic2 - tic1)
     return samples, diagnose
 
 ### NeuTra
 
 def run_neutra(
-    # rng_key, data, model, init_params,
     rng_key, logprob_fn, init_params,
     optim, n, n_flow, n_hidden, non_linearity,
-    n_atoms, pre_iter, n_warm,
-    n_iter, n_chain, nuts=False,
+    n_warm, n_iter, n_chain, nuts,
+    batch_size, batch_iter, tol, maxiter
 ):
-    # guide = AutoIAFNormal(model, num_flows=n_flow, hidden_dims=n_hidden, nonlinearity=non_linearity)
-    # # guide = AutoDiagonalNormal(model)
-    # svi = SVI(model, guide, optim, loss=Trace_ELBO(n_atoms))
+    print(f"\nNeuTra w/ {n_flow} (reverse) flows - hidden layers={n_hidden} - {non_linearity} nonlinearity,")
+    print(f"precond: {batch_size} atoms over {batch_iter} iter ({int(batch_size/batch_iter)} atoms per iter) - tolerance {tol},")
+    print(f"sampling: {n_chain} chains - {n_warm} warmup - {n_iter} samples...")
 
-    # ksam, kmcmc = jrnd.split(rng_key)
-    # params = svi.run(ksam, pre_iter, data, stable_update=True, progress_bar=False).params
-    # # id_print(params)
-    # neutra = NeuTraReparam(guide, params)
-    # reparam_model = neutra.reparam(model)
+    tic1 = pd.Timestamp.now()
+    init_fn = neutra(logprob_fn, optim, n, n_flow, n_hidden, non_lins[non_linearity])
+    def one_chain(ksam, init_x):
+        kinit, kwarm, ksam = jrnd.split(ksam, 3)
+        pullback_fn, param, err = init_fn(kinit, init_x, batch_size, batch_iter, tol, maxiter)
+        id_print(err)
+        state, kernel = run_hmc_warmup(kwarm, pullback_fn, init_x, n_warm, .8, True, nuts=nuts)
+        states, info = inference_loop0(ksam, state, kernel, n_iter)
+        return states.position, info
+    ksam = jrnd.split(rng_key, n_chain)
+    samples, info = jax.vmap(one_chain)(ksam, init_params)
+    tic2 = pd.Timestamp.now()
 
-    # mcmc = MCMC(NUTS(reparam_model), num_warmup=n_warm, num_samples=n_iter, num_chains=n_chain, progress_bar=False)
-    # mcmc.run(kmcmc, data, init_params=init_params)
-    # mcmc.print_summary(exclude_deterministic=False)
-    # return mcmc
-    masks = affine_iaf_masks(n, len(n_hidden))
-    layers = []
-    for mask in masks[:-1]:
-        layers.append(MaskedDense(mask))
-        layers.append(non_linearity)
-    layers.append(MaskedDense(masks[-1]))
-    param_init_, Psi_ = stax.serial(*layers)
-    def param_init(key, shape):
-        keys = jrnd.split(key, n_flow)
-        return None, jax.vmap(lambda k: param_init_(k, shape)[1])(keys)
-    Psi = lambda param, u: Psi_(param, u).reshape(2, -1)
-
-    def T(u, param):
-        u, unravel_fn = ravel_pytree(u)
-        def flow_iter(carry, param):
-            u, ldj = carry
-            psi = Psi(param, u)
-            x = jnp.exp(psi[1]) * u + psi[0]
-            x = jax.tree_util.tree_map(lambda x: x[::-1], x)
-            ldj += jnp.sum(psi[1])
-            return (x, ldj), None
-        (x, ldj), _ = jax.lax.scan(flow_iter, (u, 0.), param)
-        x = jax.tree_util.tree_map(lambda x: x[::-1], x)
-        return unravel_fn(x), ldj
-
-    def pi_tilde(param, u):
-        x, ldj = T(u, param)
-        return -logprob_fn(x) - ldj
-    kld = lambda param, U: jnp.sum(jax.vmap(pi_tilde, (None, 0))(param, U))
-
-    # solver = jaxopt.OptaxSolver(kld, optim, maxiter=n_iter, tol=1e-2)
-    _, unraveler_fn = ravel_pytree(jax.tree_util.tree_map(lambda x: x[-1], init_params))
-    ks, ku, kp = jrnd.split(rng_key, 3)
-
-    # U = jax.vmap(unraveler_fn)(jrnd.normal(ku, shape=(n_atoms, n)))
-    ITER = 5
-    U = jax.vmap(jax.vmap(unraveler_fn))(jrnd.normal(ku, shape=(ITER, int(n_atoms / ITER), n)))
-    pre_iter = int(pre_iter / ITER)
-
-    init_param = param_init(kp, (n,))[1]
-    # param, err = optimize(init_param, solver, pre_iter, U)
-    param, err = optimize(init_param, kld, optim, pre_iter, U)
-    # id_print(err)
-    
-    pullback_fn = lambda u: -pi_tilde(param, u)
-    if nuts:
-        samples = run_nuts(ks, pullback_fn, init_params, n_warm, n_iter, n_chain)
-    else:
-        samples = run_hmc(ks, pullback_fn, init_params, n_warm, n_iter, n_chain)
-    samples = jax.vmap(jax.vmap(lambda u: T(u, param)[0]))(samples)
     print_summary(samples)
+    print("Runtime for NeuTra", tic2 - tic1)
     return samples
-    
 
 ### NUTS
 
 def run_nuts(
-    # rng_key, data, model, init_params,
     rng_key, logprob_fn, init_params,
     n_warm, n_iter, n_chain,
 ):
-    # mcmc = MCMC(NUTS(model), num_warmup=n_warm, num_samples=n_iter, num_chains=n_chain, progress_bar=False)
-    # mcmc.run(rng_key, data, init_params=init_params)
-    # mcmc.print_summary(exclude_deterministic=False)
-    # return mcmc
     def one_chain(ksam, init_param):
         kwarm, ksam = jrnd.split(ksam)
         # id_print(jnp.zeros(1))
