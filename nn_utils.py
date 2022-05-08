@@ -51,17 +51,6 @@ def Dropout(rate):
     return init_fun, apply_fun
 
 
-# def optimize(init_param, solver, n_iter, *args):
-#     def solver_iter(carry, _):
-#         param, state = solver.update(*carry, *args)
-#         return (param, state), state.error
-#     (param, _), err = jax.lax.scan(solver_iter, 
-#         (init_param, solver.init_state(init_param, *args)),
-#         jnp.arange(n_iter))
-#     return param, err
-#     # param, sstate = solver.run(init_param, *args)
-#     # return param, sstate.iter_num
-
 def optimize(init_param, loss, check, optim, tol, maxiter, key, *args):
     opt_state = optim.init(init_param)
 

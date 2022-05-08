@@ -1,14 +1,10 @@
 import argparse
 
-import pandas as pd
-
-import jax.numpy as jnp
 import jax.random as jrnd
-from jax.example_libraries import stax
 import optax
 
 from distributions import Banana
-from exec import run_atess, run_neutra, run_nuts
+from exec import run_atess, run_neutra, run_nuts, run_ess
 
 from jax.config import config
 # config.update("jax_debug_nans", True)
@@ -26,12 +22,11 @@ def main(args):
     ksam, kinit = jrnd.split(jrnd.PRNGKey(args.seed))
     dist.initialize_model(kinit, n_chain)
 
-    print(f"\nNUTS w/ {n_chain} chains - {n_warm} warmup - {n_iter} samples...")
-    tic1 = pd.Timestamp.now()
+    run_ess(ksam, dist.logprob_fn, dist.init_params, 
+        N_PARAM, n_warm, n_iter, n_chain)
+
     run_nuts(ksam, dist.logprob_fn, dist.init_params, 
         n_warm, n_iter, n_chain)
-    tic2 = pd.Timestamp.now()
-    print("Runtime for NUTS", tic2 - tic1)
 
     # schedule = optax.polynomial_schedule(1e-2, 1e-4, 1, 9000, 1000)
     # schedule = optax.piecewise_constant_schedule(init_value=1e-2,
@@ -50,6 +45,24 @@ def main(args):
     n_hidden = [N_PARAM] * 1
     n_flow = 2
     norm = False
+    samples = run_atess(ksam, dist.logprob_fn, dist.init_params,
+        optim, N_PARAM, n_flow, n_hidden, non_lin, norm,
+        n_iter, n_chain, n_epochs, batch_size, batch_iter, tol, maxiter)
+
+    optim = optax.adam(schedule)
+    non_lin = 'swish'
+    n_hidden = [N_PARAM] * 1
+    n_flow = 2
+    norm = False
+    samples = run_atess(ksam, dist.logprob_fn, dist.init_params,
+        optim, N_PARAM, n_flow, n_hidden, non_lin, norm,
+        n_iter, n_chain, n_epochs, batch_size, batch_iter, tol, maxiter)
+
+    optim = optax.adam(schedule)
+    non_lin = 'relu'
+    n_hidden = [N_PARAM] * 1
+    n_flow = 2
+    norm = True
     samples = run_atess(ksam, dist.logprob_fn, dist.init_params,
         optim, N_PARAM, n_flow, n_hidden, non_lin, norm,
         n_iter, n_chain, n_epochs, batch_size, batch_iter, tol, maxiter)
