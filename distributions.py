@@ -84,7 +84,7 @@ class RegimeMixtureDistribution(dist.Distribution):
             lik_2 = (1 - self.p[1]) * eta_1 + self.p[1] * eta_2
             # lik_2 = jnp.clip(lik_2, a_min=1e-37)
             lik = xi_1 * lik_1 + (1 - xi_1) * lik_2
-            lik = jnp.clip(lik, a_min=1e-37)
+            lik = jnp.clip(lik, a_min=1e-6)
             return (y, xi_1 * lik_1 / lik), jnp.log(lik)
         _, log_liks = jax.lax.scan(obs_t, (self.y_0, self.xi_0), value)
         return jnp.sum(log_liks)
@@ -231,7 +231,7 @@ class PredatorPrey:
             atol=1e-5, 
             mxstep=1000
         )
-        pp = jnp.clip(pp, a_min=1e-37)
+        pp = jnp.clip(pp, a_min=1e-6)
         # term = diffrax.ODETerm(dxy_dt)
         # solver = diffrax.Dopri5()
         # # solver = diffrax.Tsit5()

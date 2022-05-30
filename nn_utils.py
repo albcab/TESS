@@ -51,15 +51,15 @@ def Dropout(rate):
     return init_fun, apply_fun
 
 
-def optimize(init_param, loss, check, optim, tol, maxiter, key, *args):
+def optimize(init_param, loss, check, optim, tol, maxiter, key, X, batch_iter, n_batch):
     opt_state = optim.init(init_param)
 
-    def while_fn(bool_carry):
-        _, carry = bool_carry
-        def step_epoch(carry, arg):
+    def while_fn(var_carry):
+        _, carry = var_carry
+        def step_epoch(carry, x):
             k, i, params, opt_state = carry
             k, ki = jrnd.split(k)
-            loss_value, grads = jax.value_and_grad(loss)(params, ki, *arg)
+            loss_value, grads = jax.value_and_grad(loss)(params, ki, x)
             updates, opt_state_ = optim.update(grads, opt_state, params)
             params_ = optax.apply_updates(params, updates)
             return jax.lax.cond(
@@ -68,8 +68,9 @@ def optimize(init_param, loss, check, optim, tol, maxiter, key, *args):
                 lambda _: ((k, i+1, params, opt_state), jnp.nan),
                 None,
             )
-        (key, i, params, state), loss_value = jax.lax.scan(step_epoch, carry, args)
-        var = check(params, key, *args)
+        x = jax.tree_map(lambda x: jrnd.choice(carry[0], x, (batch_iter, n_batch), False), X)
+        (key, i, params, state), loss_value = jax.lax.scan(step_epoch, carry, x)
+        var = check(params, key, X)
         # id_print(var)
         return var, (key, i, params, state)
     stop_fn = lambda c: (c[0] >= tol) & (c[1][1] < maxiter) 

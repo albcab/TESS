@@ -16,7 +16,8 @@ import blackjax
 
 
 non_lins = {
-    'tanh': stax.Tanh,
+    'tanh': jax.nn.tanh, 
+    # 'tanh': stax.Tanh,
     'elu': stax.Elu,
     'relu': stax.Relu,
     'swish': stax.elementwise(jax.nn.swish),
@@ -28,7 +29,7 @@ def run_ess(
     rng_key, logprob_fn, init_params,
     n, n_warm, n_iter, n_chain,
 ):
-    print(f"\(T)ESS w/ {n_chain} chains - {n_warm} warmup - {n_iter} samples...")
+    print(f"\n(T)ESS w/ {n_chain} chains - {n_warm} warmup - {n_iter} samples...")
 
     tic1 = pd.Timestamp.now()
     ess = elliptical_slice(logprob_fn, n)
@@ -41,6 +42,7 @@ def run_ess(
         return states.position, info.subiter.mean()
     ksam = jrnd.split(rng_key, n_chain)
     samples, subiter = jax.vmap(one_chain)(ksam, init_params)
+    # samples, subiter = jax.pmap(one_chain)(ksam, init_params)
     tic2 = pd.Timestamp.now()
 
     print_summary(samples)
@@ -71,11 +73,12 @@ def run_atess(
         return states.position, info.subiter.mean(), (err, param, error)
     ksam = jrnd.split(rng_key, n_chain)
     samples, subiter, diagnose = jax.vmap(one_chain)(ksam, init_params)
+    # samples, subiter, diagnose = jax.pmap(one_chain)(ksam, init_params)
     tic2 = pd.Timestamp.now()
 
     print_summary(samples)
     print("Runtime for ATESS", tic2 - tic1)
-    return samples, diagnose
+    return samples
 
 ### NeuTra
 
@@ -93,13 +96,14 @@ def run_neutra(
     init_fn = neutra(logprob_fn, optim, n, n_flow, n_hidden, non_lins[non_linearity])
     def one_chain(ksam, init_x):
         kinit, kwarm, ksam = jrnd.split(ksam, 3)
-        pullback_fn, param, err = init_fn(kinit, init_x, batch_size, batch_iter, tol, maxiter)
+        pullback_fn, push_fn, err = init_fn(kinit, init_x, batch_size, batch_iter, tol, maxiter)
         id_print(err)
         state, kernel = run_hmc_warmup(kwarm, pullback_fn, init_x, n_warm, .8, True, nuts=nuts)
         states, info = inference_loop0(ksam, state, kernel, n_iter)
-        return states.position, info
+        return push_fn(states.position), info
     ksam = jrnd.split(rng_key, n_chain)
     samples, info = jax.vmap(one_chain)(ksam, init_params)
+    # samples, info = jax.pmap(one_chain)(ksam, init_params)
     tic2 = pd.Timestamp.now()
 
     print_summary(samples)
@@ -112,7 +116,7 @@ def run_nuts(
     rng_key, logprob_fn, init_params,
     n_warm, n_iter, n_chain,
 ):
-    print(f"\NUTS w/ {n_chain} chains - {n_warm} warmup - {n_iter} samples...")
+    print(f"\nNUTS w/ {n_chain} chains - {n_warm} warmup - {n_iter} samples...")
 
     tic1 = pd.Timestamp.now()
     def one_chain(ksam, init_param):
@@ -125,6 +129,7 @@ def run_nuts(
         return states.position, info
     ksam = jrnd.split(rng_key, n_chain)
     samples, info = jax.vmap(one_chain)(ksam, init_params)
+    # samples, info = jax.pmap(one_chain)(ksam, init_params)
     tic2 = pd.Timestamp.now()
 
     print_summary(samples)
