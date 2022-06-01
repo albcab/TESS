@@ -16,11 +16,10 @@ import blackjax
 
 
 non_lins = {
-    'tanh': jax.nn.tanh, 
-    # 'tanh': stax.Tanh,
-    'elu': stax.Elu,
-    'relu': stax.Relu,
-    'swish': stax.elementwise(jax.nn.swish),
+    'tanh': jax.nn.tanh,
+    'elu': jax.nn.elu,
+    'relu': jax.nn.relu,
+    'swish': jax.nn.swish,
 }
 
 ### ATESS no transformation
@@ -86,14 +85,14 @@ def run_neutra(
     rng_key, logprob_fn, init_params,
     optim, n, n_flow, n_hidden, non_linearity,
     n_warm, n_iter, n_chain, nuts,
-    batch_size, batch_iter, tol, maxiter
+    batch_size, batch_iter, tol, maxiter, invert
 ):
-    print(f"\nNeuTra w/ {n_flow} (reverse) flows - hidden layers={n_hidden} - {non_linearity} nonlinearity,")
+    print(f"\nNeuTra w/ {n_flow} (reverse: {invert}) flows - hidden layers={n_hidden} - {non_linearity} nonlinearity,")
     print(f"precond: {batch_size} atoms over {batch_iter} iter ({int(batch_size/batch_iter)} atoms per iter) - tolerance {tol},")
     print(f"sampling: {n_chain} chains - {n_warm} warmup - {n_iter} samples...")
 
     tic1 = pd.Timestamp.now()
-    init_fn = neutra(logprob_fn, optim, n, n_flow, n_hidden, non_lins[non_linearity])
+    init_fn = neutra(logprob_fn, optim, n, n_flow, n_hidden, non_lins[non_linearity], invert)
     def one_chain(ksam, init_x):
         kinit, kwarm, ksam = jrnd.split(ksam, 3)
         pullback_fn, push_fn, err = init_fn(kinit, init_x, batch_size, batch_iter, tol, maxiter)

@@ -4,9 +4,11 @@ import jax.random as jrnd
 from jax.nn.initializers import glorot_normal, normal
 
 from jax.experimental.host_callback import id_print
+from numpy import std
 
 import optax
-
+import haiku as hk
+import distrax as dx
 
 def affine_iaf_masks(d, n_hidden):
     masks = [jnp.zeros((d, d)).at[jnp.tril_indices(d, -1)].set(1.)]
@@ -17,6 +19,47 @@ def affine_iaf_masks(d, n_hidden):
         jnp.zeros((d, d)).at[jnp.tril_indices(d)].set(1.),
     ]))
     return masks
+
+class MaskedLinear(hk.Module):
+    def __init__(self, mask, 
+        # w_init=hk.initializers.VarianceScaling(),
+        w_init=hk.initializers.TruncatedNormal(stddev=.1), 
+        # w_init=jnp.zeros,
+        b_init=hk.initializers.RandomNormal(stddev=.1), 
+        # b_init=jnp.zeros
+    ):
+        super().__init__()
+        self._mask = mask
+        self._w_init = w_init
+        self._b_init = b_init
+    def __call__(self, x):
+        mask_shape = self._mask.shape
+        w = hk.get_parameter('w',
+            shape=mask_shape,
+            init=self._w_init
+            # init=hk.initializers.TruncatedNormal(stddev=1. / jnp.sqrt(mask_shape[0])),
+        )
+        out = jnp.dot(w * self._mask, x)
+        b = hk.get_parameter('b', shape=mask_shape[:-1], init=self._b_init)
+        # b = jnp.broadcast_to(b, out.shape)
+        return out + b
+
+class Autoregressive(dx.Bijector):
+    def __init__(self, d, conditioner, bijector):
+        self._conditioner = conditioner
+        self._bijector = bijector
+        super().__init__(event_ndims_in=1)
+    
+    def forward_and_log_det(self, u):
+        params = self._conditioner(u)
+        x, log_d = self._bijector(params).forward_and_log_det(u)
+        return x, jnp.sum(log_d)
+
+    def inverse_and_log_det(self, x):
+        params = self._conditioner(x)
+        u, log_d = self._bijector(params).inverse_and_log_det(x)
+        return u, jnp.sum(log_d)
+
 
 def MaskedDense(mask, W_init=glorot_normal(), b_init=normal()):
     def init_fun(rng_key, input_shape):
