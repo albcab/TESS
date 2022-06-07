@@ -23,12 +23,6 @@ N_PARAM = 2
 
 def main(args):
 
-    if args.flow in ['iaf', 'riaf'] and args.n_hidden_units != N_PARAM:
-        warnings.warn('IAF flows always have dimension of hidden units same as params.')
-
-    if args.flow in ['ncdense', 'cdense']:
-        warnings.warn('NeuTra samples for fully coupled dense flows including latent parameters are irrelevant, see code.')
-
     print("Setting up Neal's Funnel density...")
     dist = NealsFunnel()
 
@@ -57,19 +51,20 @@ def main(args):
     [batch_iter, batch_size] = args.batch_shape
     tol = args.tol
     flow = args.flow
+    distance = args.distance
     non_lin = args.non_linearity
     n_hidden = [args.n_hidden_units] * args.n_hidden
     n_flow = args.n_flow
 
-    atess_samples, atess_flow_samples = run_atess(ksam, dist.logprob_fn, dist.init_params, flow,
-        optim, N_PARAM, n_flow, n_hidden, non_lin,
+    atess_samples, atess_flow_samples = run_atess(ksam, dist.logprob_fn, dist.init_params, 
+        flow, distance, optim, N_PARAM, n_flow, n_hidden, non_lin,
         n_iter, n_chain, n_epochs, batch_size, batch_iter, tol, maxiter)
 
-    neutra_samples, neutra_flow_samples = run_neutra(ksam, dist.logprob_fn, dist.init_params, flow,
-        optim, N_PARAM, n_flow, n_hidden, non_lin,
+    neutra_samples, neutra_flow_samples = run_neutra(ksam, dist.logprob_fn, dist.init_params, 
+        flow, distance, optim, N_PARAM, n_flow, n_hidden, non_lin,
         n_warm, n_iter, n_chain, True, batch_size, batch_iter, tol, maxiter)
 
-    jnp.savez(f'nealsfunnel_{flow}_{non_lin}_{n_epochs}.npz', 
+    jnp.savez(f'nealsfunnel_{flow}_{distance}_{non_lin}_{n_epochs}.npz', 
         ess_samples=ess_samples, nuts_samples=nuts_samples,
         atess_samples=atess_samples, atess_flow_samples=atess_flow_samples,
         neutra_samples=neutra_samples, neutra_flow_samples=neutra_flow_samples,
@@ -84,6 +79,7 @@ if __name__ == "__main__":
     parser.add_argument('-b', '--batch-shape', type=int, nargs=2, default=[20, 128])
     parser.add_argument('-nl', '--non-linearity', type=str, default='tanh')
     parser.add_argument('-f', '--flow', type=str, default='riaf')
+    parser.add_argument('-d', '--distance', type=str, default='kld')
     parser.add_argument('-nh', '--n-hidden', type=int, default=2)
     parser.add_argument('-nf', '--n-flow', type=int, default=2)
     parser.add_argument('-nhu', '--n-hidden-units', type=int, default=N_PARAM)

@@ -22,11 +22,11 @@ def affine_iaf_masks(d, n_hidden):
 
 class MaskedLinear(hk.Module):
     def __init__(self, mask, 
-        w_init=hk.initializers.VarianceScaling(scale=.01),
+        w_init=hk.initializers.VarianceScaling(scale=.1),
         # w_init=hk.initializers.TruncatedNormal(stddev=.1), 
         # w_init=jnp.zeros,
-        # b_init=hk.initializers.RandomNormal(stddev=.1), 
-        b_init=jnp.zeros
+        b_init=hk.initializers.RandomNormal(stddev=.1), 
+        # b_init=jnp.zeros
     ):
         super().__init__()
         self._mask = mask
@@ -61,48 +61,16 @@ class Autoregressive(dx.Bijector):
         return u, jnp.sum(log_d)
 
 
-def MaskedDense(mask, W_init=glorot_normal(), b_init=normal()):
-    def init_fun(rng_key, input_shape):
-        k1, k2 = jrnd.split(rng_key)
-        W = W_init(k1, mask.shape)
-        b = b_init(k2, mask.shape[:1])
-        params = (W, b)
-        return input_shape[:-1] + mask.shape[:1], params
-    def apply_fun(params, inputs, **kwargs):
-        W, b = params
-        return jnp.dot(W * mask, inputs) + b
-    return init_fun, apply_fun
-
-def Dropout(rate):
-    """Layer construction function for a dropout layer with given rate."""
-    def init_fun(rng, input_shape):
-        return input_shape, ()
-    def apply_fun(params, inputs, **kwargs):
-        rng = kwargs.get('rng', None)
-        mode = kwargs.get('mode', 'train')
-        if rng is None:
-            msg = ("Dropout layer requires apply_fun to be called with a PRNG key "
-                  "argument. That is, instead of `apply_fun(params, inputs)`, call "
-                  "it like `apply_fun(params, inputs, rng)` where `rng` is a "
-                  "jax.random.PRNGKey value.")
-            raise ValueError(msg)
-        if mode == 'train':
-            keep = jrnd.bernoulli(rng, rate, inputs.shape)
-            return jnp.where(keep, inputs / rate, 0)
-        else:
-            return inputs
-    return init_fun, apply_fun
-
-
-def optimize(init_param, loss, check, optim, tol, maxiter, key, X, batch_iter, batch_size):
+def optimize(init_param, loss_check, optim, tol, maxiter, key, X, batch_iter, batch_size):
     opt_state = optim.init(init_param)
+    loss, check = loss_check
 
     def while_fn(var_carry):
         _, carry = var_carry
         def step_epoch(carry, x):
             k, i, params, opt_state = carry
             k, ki = jrnd.split(k)
-            loss_value, grads = jax.value_and_grad(loss)(params, ki, x)
+            loss_value, grads = jax.value_and_grad(loss)(params, ki, x, batch_size)
             updates, opt_state_ = optim.update(grads, opt_state, params)
             params_ = optax.apply_updates(params, updates)
             return jax.lax.cond(
@@ -113,7 +81,7 @@ def optimize(init_param, loss, check, optim, tol, maxiter, key, X, batch_iter, b
             )
         x = jax.tree_map(lambda x: jrnd.choice(carry[0], x, (batch_iter, batch_size), False), X)
         (key, i, params, state), loss_value = jax.lax.scan(step_epoch, carry, x)
-        var = check(params, key, X)
+        var = check(params, key, X, batch_size * batch_iter)
         # id_print(var)
         return var, (key, i, params, state)
     stop_fn = lambda c: (c[0] >= tol) & (c[1][1] < maxiter) 

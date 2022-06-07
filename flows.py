@@ -1,9 +1,7 @@
 from typing import Callable, Sequence, Tuple
 
-import jax
 import jax.numpy as jnp
 from jax.flatten_util import ravel_pytree
-from jax.example_libraries import stax
 
 from jax.experimental.host_callback import id_print
 
@@ -11,6 +9,7 @@ import haiku as hk
 import distrax as dx
 
 from nn_utils import affine_iaf_masks, MaskedLinear, Autoregressive
+
 
 def make_iaf(d, n_hidden, non_linearity):
     masks = affine_iaf_masks(d, n_hidden)
@@ -43,11 +42,11 @@ def make_iaf_flow(d, n_flow, n_hidden, non_linearity, invert):
 def make_dense(d, hidden_dims, norm, non_linearity):
     layers = []
     for hd in hidden_dims:
-        layers.append(hk.Linear(hd, w_init=hk.initializers.VarianceScaling(.1), b_init=hk.initializers.RandomNormal()))
+        layers.append(hk.Linear(hd, w_init=hk.initializers.VarianceScaling(.1), b_init=hk.initializers.RandomNormal(.1)))
         if norm:
             layers.append(hk.LayerNorm(-1, True, True))
         layers.append(non_linearity)
-    layers.append(hk.Linear(2 * d, w_init=hk.initializers.VarianceScaling(.1), b_init=hk.initializers.RandomNormal()))
+    layers.append(hk.Linear(2 * d, w_init=hk.initializers.VarianceScaling(.1), b_init=hk.initializers.RandomNormal(.1)))
     layers.append(hk.Reshape((2, d), preserve_dims=-1))
     return hk.Sequential(layers)
 
@@ -67,7 +66,6 @@ def make_coupling_flow(d, n_flow, hidden_dims, non_linearity, norm):
 class inverse_autoreg:
     def __new__(
         cls,
-        logprob_fn: Callable,
         d: int, n_flow: int,
         hidden_dims: Sequence[int], non_linearity: Callable, invert: bool,
     ) -> Tuple:
@@ -85,15 +83,12 @@ class inverse_autoreg:
             u, ldj = inverse_and_log_det.apply(param, rng, x)
             return unravel_fn(u), v, ldj
 
-        reverse_kld, forward_kld = kullback_liebler(logprob_fn, d, flow, flow_inv)
-
-        return forward_and_log_det.init, flow, flow_inv, reverse_kld, forward_kld
+        return forward_and_log_det.init, flow, flow_inv
 
 
 class coupling_dense:
     def __new__(
         cls,
-        logprob_fn: Callable,
         d: int, n_flow: int,
         hidden_dims: Sequence[int], non_linearity: Callable, norm: bool,
     ) -> Tuple:
@@ -114,35 +109,4 @@ class coupling_dense:
             uv, ldj = inverse_and_log_det.apply(param, rng, jnp.concatenate([x, v]))
             return unravel_fn(uv.at[:d].get()), uv.at[-d:].get(), ldj
 
-        reverse_kld, forward_kld = kullback_liebler(logprob_fn, d, flow, flow_inv)
-
-        return param_init, flow, flow_inv, reverse_kld, forward_kld
-
-
-class kullback_liebler:
-    def __new__(cls, logprob_fn, d, flow, flow_inv) -> Tuple:
-
-        def reverse_kld(param, u, k):
-            v = jax.random.normal(k, (d,))
-            x, v_, ldj = flow(u, v, param, k)
-            u = ravel_pytree(u)[0]
-            return (
-                -.5 * jnp.dot(u, u) - .5 * jnp.dot(v, v) 
-                -logprob_fn(x) - ldj + .5 * jnp.dot(v_, v_)
-            )
-
-        def forward_kld(param, x, k):
-            v = jax.random.normal(k, (d,))
-            u, v_, ldj = flow_inv(x, v, param, k)
-            u = ravel_pytree(u)[0]
-            return (
-                logprob_fn(x) - .5 * jnp.dot(v, v) 
-                + .5 * jnp.dot(u, u) - ldj + .5 * jnp.dot(v_, v_)
-            )
-
-        return reverse_kld, forward_kld
-
-# class renyi_alpha:
-#     def __new__(cls, logprob_fn, d, flow, flow_inv) -> Tuple:
-
-#         def 
+        return param_init, flow, flow_inv

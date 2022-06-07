@@ -65,26 +65,19 @@ class atransp_elliptical_slice:
     def __new__(
         cls,
         logprob_fn: Callable,
-        optim: Optim, d, param_init, flow, flow_inv, reverse_kld, forward_kld
+        optim: Optim, d, param_init, flow, flow_inv, reverse, forward
     ) -> SamplingAlgorithm:
 
         def init_fn(
             rng: PRNGKey, position: PyTree, 
             batch_size: int, batch_iter: int, tol: float, maxiter: int,
         ):
-            def kld0(param, k, U):
-                K = jax.random.split(k, batch_size)
-                return jnp.sum(jax.vmap(reverse_kld, (None, 0, 0))(param, U, K))
-            def check0(param, k, U):
-                K = jax.random.split(k, batch_size * batch_iter)
-                return jnp.var(jax.vmap(lambda u, k: reverse_kld(param, u, k))(U, K))
-
             p, unraveler_fn = ravel_pytree(position)
             ku, ko = jax.random.split(rng)
             U = jax.vmap(unraveler_fn)(jax.random.normal(ku, shape=(batch_iter * batch_size, d)))
 
             param = param_init(ko, p)
-            param, err = optimize(param, kld0, check0, optim, tol, maxiter, ko, U, batch_iter, batch_size)
+            param, err = optimize(param, reverse, optim, tol, maxiter, ko, U, batch_iter, batch_size)
 
             # #starting from flow observation
             # ku, kv = jax.random.split(ko)
@@ -111,12 +104,6 @@ class atransp_elliptical_slice:
             n_epoch: int, batch_size: int, batch_iter: int, 
             tol: float, maxiter: int,
         ):
-            def kld_warm(param, k, X):
-                K = jax.random.split(k, batch_size)
-                return jnp.sum(jax.vmap(forward_kld, (None, 0, 0))(param, X, K))
-            def check(param, k, X):
-                K = jax.random.split(k, batch_size * batch_iter)
-                return jnp.var(jax.vmap(lambda x, k: forward_kld(param, x, k))(X, K))
             rng_key, ks, kc = jax.random.split(rng_key, 3)
             states, info = inference_loop(ks, state, step_fn, batch_size * batch_iter, param)
             X = states.position
@@ -141,7 +128,7 @@ class atransp_elliptical_slice:
 
             def one_epoch(carry, key):
                 state, param, X = carry
-                param, err = optimize(param, kld_warm, check, optim, tol, maxiter, key, X, batch_iter, batch_size)
+                param, err = optimize(param, forward, optim, tol, maxiter, key, X, batch_iter, batch_size)
                 ks, kc = jax.random.split(key)
                 states, info = inference_loop(ks, state, step_fn, batch_size * batch_iter, param)
                 X = jax.tree_map(lambda x, y: jax.random.choice(kc, jnp.concatenate([x, y]), (batch_iter * batch_size,), False), states.position, X)
@@ -152,7 +139,7 @@ class atransp_elliptical_slice:
             # p = ravel_pytree(state.position)[0]
             # param_ = param_init(kc, p)
             (state, param, X), err = jax.lax.scan(one_epoch, (state, param, X), rng_keys[:-1])
-            param, err_ = optimize(param, kld_warm, check, optim, tol, maxiter, rng_keys[-1], X, batch_iter, batch_size)
+            param, err_ = optimize(param, forward, optim, tol, maxiter, rng_keys[-1], X, batch_iter, batch_size)
             return (state, param), jnp.hstack([err, err_])
         
         return SamplingAlgorithm(init_fn, step_fn), warm_fn
@@ -162,30 +149,23 @@ class neutra:
     def __new__(
         cls,
         logprob_fn: Callable,
-        optim: Optim, d, param_init, flow, reverse_kld,
+        optim: Optim, d, param_init, flow, reverse,
     ) -> SamplingAlgorithm:
 
         def init_fn(
             rng: PRNGKey, position: PyTree, 
             batch_size: int, batch_iter: int, tol: float, maxiter : int,
         ):
-            def kld(param, k, U):
-                K = jax.random.split(k, batch_size)
-                return jnp.sum(jax.vmap(reverse_kld, (None, 0, 0))(param, U, K))
-            def check(param, k, U):
-                K = jax.random.split(k, batch_size * batch_iter)
-                return jnp.var(jax.vmap(lambda u, k: reverse_kld(param, u, k))(U, K))
-
             p, unraveler_fn = ravel_pytree(position)
             ku, kp = jax.random.split(rng)
             U = jax.vmap(unraveler_fn)(jax.random.normal(ku, shape=(batch_iter * batch_size, d)))
 
             init_param = param_init(kp, p)
-            param, err = optimize(init_param, kld, check, optim, tol, maxiter, kp, U, batch_iter, batch_size)
+            param, err = optimize(init_param, reverse, optim, tol, maxiter, kp, U, batch_iter, batch_size)
             def pullback_fn(u):
-                x, _, ldj = flow(u, u, param)
+                x, _, ldj = flow(u, jnp.zeros(d), param)
                 return logprob_fn(x) + ldj
-            push_fn = jax.vmap(lambda u: flow(u, u, param)[0])
+            push_fn = jax.vmap(lambda u: flow(u, jnp.zeros(d), param)[0])
 
             return pullback_fn, push_fn, param, err
 
@@ -223,7 +203,7 @@ def tess_proposal(
         u, m = ellipsis(u_position, momentum, theta)
         #step 9: get new position
         slice = slice_fn(u, m)
-        # p, m = T(u, m)
+        p, m = T(u, m)
         #step 10-20: acceptance
         # slice = slice_fn(p, m)
 
@@ -233,19 +213,18 @@ def tess_proposal(
             theta = jax.random.uniform(thetak, minval=theta_min, maxval=theta_max)
             u, m = ellipsis(u_position, momentum, theta)
             slice = slice_fn(u, m)
-            # p, m = T(u, m)
+            p, m = T(u, m)
             # slice = slice_fn(p, m)
             theta_min = jnp.where(theta < 0, theta, theta_min)
             theta_max = jnp.where(theta > 0, theta, theta_max)
             subiter += 1
-            return rng, slice, subiter, theta, theta_min, theta_max, u, m
+            return rng, slice, subiter, theta, theta_min, theta_max, p, m
 
-        _, slice, subiter, theta, *_, u, m = jax.lax.while_loop(
-            lambda vals: vals[1] <= logy, 
+        _, slice, subiter, theta, *_, position, momentum = jax.lax.while_loop(
+            lambda vals: (vals[1] <= logy) | jnp.isinf(ravel_pytree(vals[-2])[0]).any(), 
             while_fun, 
-            (rng_key, slice, 1, theta, theta_min, theta_max, u, m)
+            (rng_key, slice, 1, theta, theta_min, theta_max, p, m)
         )
-        position, momentum = T(u, m)
         return (SliceState(position, slice), 
             SliceInfo(momentum, theta, subiter))
 
