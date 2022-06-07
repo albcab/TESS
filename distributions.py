@@ -1,3 +1,5 @@
+import abc
+
 import jax
 import jax.numpy as jnp
 from jax.scipy.stats import norm, gamma, bernoulli
@@ -319,14 +321,12 @@ class PredatorPrey:
     #     return -self.logprob(**params)
 
 
-class Banana:
-    def __init__(self) -> None:
-        pass
+class BiDistribution(metaclass=abc.ABCMeta):
 
+    @abc.abstractmethod
     def logprob(self, x1, x2):
-        return norm.logpdf(x1, 0.0, jnp.sqrt(8.0)) + norm.logpdf(
-            x2, 1 / 4 * x1**2, 1.0
-        )
+        """defines the log probability function"""
+
     def logprob_fn(self, x):
         return self.logprob(**x)
 
@@ -336,6 +336,18 @@ class Banana:
             'x1': jax.random.normal(ki1, shape=(n_chain,)), 
             'x2': jax.random.normal(ki2, shape=(n_chain,))
         }
+
+class Banana(BiDistribution):
+    def logprob(self, x1, x2):
+        return norm.logpdf(x1, 0.0, jnp.sqrt(8.0)) + norm.logpdf(
+            x2, 1 / 4 * x1**2, 1.0
+        )
+
+class NealsFunnel(BiDistribution):
+    def logprob(self, x1, x2):
+        return norm.logpdf(x1, 0.0, 1.) + norm.logpdf(
+            x2, 0., jnp.exp(2. * x1)
+        )
 
 
 def dpp_dt(xy, t, alpha, beta, gamma, delta):

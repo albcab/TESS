@@ -9,6 +9,7 @@ import pandas as pd
 
 from numpyro.diagnostics import print_summary
 
+from flows import inverse_autoreg, coupling_dense
 from kernels import atransp_elliptical_slice, elliptical_slice, neutra
 from mcmc_utils import inference_loop, inference_loop0
 
@@ -20,6 +21,13 @@ non_lins = {
     'elu': jax.nn.elu,
     'relu': jax.nn.relu,
     'swish': jax.nn.swish,
+}
+
+flows = {
+    'iaf': lambda fn, n, f, h, nl: inverse_autoreg(fn, n, f, h, nl, False),
+    'riaf': lambda fn, n, f, h, nl: inverse_autoreg(fn, n, f, h, nl, True),
+    'cdense': lambda fn, n, f, h, nl: coupling_dense(fn, n, f, h, nl, False),
+    'ncdense': lambda fn, n, f, h, nl: coupling_dense(fn, n, f, h, nl, True),
 }
 
 ### ATESS no transformation
@@ -51,62 +59,88 @@ def run_ess(
 ### ATESS
 
 def run_atess(
-    rng_key, logprob_fn, init_params,
-    optim, n, n_flow, n_hidden, non_linearity, norm,
+    rng_key, logprob_fn, init_params, flow,
+    optim, n, n_flow, n_hidden, non_linearity,
     n_iter, n_chain,
     n_epochs, batch_size, batch_iter, tol, maxiter,
 ):
-    print(f"\nATESS w/ {n_flow} flows - hidden layers={n_hidden} - {non_linearity} nonlinearity - batch normalization? {norm},")
-    print(f"warmup & precond: {n_epochs} epochs - {batch_size} samples over {batch_iter} iter ({int(batch_size/batch_iter)} samples per iter) - tolerance {tol},")
+    print(f"\nATESS w/ {n_flow} flows (flow: {flow}) - hidden layers={n_hidden} - {non_linearity} nonlinearity")
+    print(f"warmup & precond: {n_epochs} epochs - batches of size {batch_size} over {batch_iter} iter - tolerance {tol}")
     print(f"sampling: {n_chain} chains - {n_iter} samples each...")
 
     tic1 = pd.Timestamp.now()
-    atess, warm_fn = atransp_elliptical_slice(logprob_fn, optim, n, n_flow, n_hidden, non_lins[non_linearity], norm)
+    (param_init, flow, flow_inv, reverse_kld, forward_kld
+    ) = flows[flow](logprob_fn, n, n_flow, n_hidden, non_lins[non_linearity])
+    atess, warm_fn = atransp_elliptical_slice(logprob_fn, optim, n, param_init, flow, flow_inv, reverse_kld, forward_kld)
     def one_chain(ksam, init_x):
         kinit, kwarm, ksam = jrnd.split(ksam, 3)
         state, param, err = atess.init(kinit, init_x, batch_size, batch_iter, tol, maxiter)
         id_print(err)
-        (state, param), error = warm_fn(kwarm, state, param, n_epochs, batch_size, batch_iter, tol, maxiter)
-        id_print(error)
+        if n_epochs > 0:
+            (state, param), error = warm_fn(kwarm, state, param, n_epochs, batch_size, batch_iter, tol, maxiter)
+            id_print(error)
         states, info = inference_loop(ksam, state, atess.step, n_iter, param)
-        return states.position, info.subiter.mean(), (err, param, error)
+        return states.position, info.subiter.mean(), param
     ksam = jrnd.split(rng_key, n_chain)
-    samples, subiter, diagnose = jax.vmap(one_chain)(ksam, init_params)
+    samples, subiter, params = jax.vmap(one_chain)(ksam, init_params)
+    print(subiter)
     # samples, subiter, diagnose = jax.pmap(one_chain)(ksam, init_params)
     tic2 = pd.Timestamp.now()
 
+    flow_samples = get_flow_samples(ksam[-1], flow, params, n_chain, n_iter, n, init_params)
+
     print_summary(samples)
+    print_summary(flow_samples)
     print("Runtime for ATESS", tic2 - tic1)
-    return samples
+    return samples, flow_samples
 
 ### NeuTra
 
 def run_neutra(
-    rng_key, logprob_fn, init_params,
+    rng_key, logprob_fn, init_params, flow,
     optim, n, n_flow, n_hidden, non_linearity,
     n_warm, n_iter, n_chain, nuts,
-    batch_size, batch_iter, tol, maxiter, invert
+    batch_size, batch_iter, tol, maxiter, 
 ):
-    print(f"\nNeuTra w/ {n_flow} (reverse: {invert}) flows - hidden layers={n_hidden} - {non_linearity} nonlinearity,")
-    print(f"precond: {batch_size} atoms over {batch_iter} iter ({int(batch_size/batch_iter)} atoms per iter) - tolerance {tol},")
+    print(f"\nNeuTra w/ {n_flow} (flow: {flow}) flows - hidden layers={n_hidden} - {non_linearity} nonlinearity")
+    print(f"precond: batches of {batch_size} atoms over {batch_iter} iter - tolerance {tol}")
     print(f"sampling: {n_chain} chains - {n_warm} warmup - {n_iter} samples...")
 
     tic1 = pd.Timestamp.now()
-    init_fn = neutra(logprob_fn, optim, n, n_flow, n_hidden, non_lins[non_linearity], invert)
+    (param_init, flow, _, reverse_kld, _
+    ) = flows[flow](logprob_fn, n, n_flow, n_hidden, non_lins[non_linearity])
+    init_fn = neutra(logprob_fn, optim, n, param_init, flow, reverse_kld)
     def one_chain(ksam, init_x):
         kinit, kwarm, ksam = jrnd.split(ksam, 3)
-        pullback_fn, push_fn, err = init_fn(kinit, init_x, batch_size, batch_iter, tol, maxiter)
+        pullback_fn, push_fn, param, err = init_fn(kinit, init_x, batch_size, batch_iter, tol, maxiter)
         id_print(err)
         state, kernel = run_hmc_warmup(kwarm, pullback_fn, init_x, n_warm, .8, True, nuts=nuts)
         states, info = inference_loop0(ksam, state, kernel, n_iter)
-        return push_fn(states.position), info
+        return push_fn(states.position), param
     ksam = jrnd.split(rng_key, n_chain)
-    samples, info = jax.vmap(one_chain)(ksam, init_params)
+    samples, params = jax.vmap(one_chain)(ksam, init_params)
     # samples, info = jax.pmap(one_chain)(ksam, init_params)
     tic2 = pd.Timestamp.now()
 
+    flow_samples = get_flow_samples(ksam[-1], flow, params, n_chain, n_iter, n, init_params)
+
     print_summary(samples)
+    print_summary(flow_samples)
     print("Runtime for NeuTra", tic2 - tic1)
+    return samples, flow_samples
+
+def get_flow_samples(rng_key, flow, params, n_chain, n_iter, d, init_params):
+    def one_chain(ksam, chain_info):
+        init_x, param = chain_info
+        ku, kv = jax.random.split(ksam)
+        _, unraveler_fn = jax.flatten_util.ravel_pytree(init_x)
+        U = jax.vmap(unraveler_fn)(jax.random.normal(ku, shape=(n_iter, d)))
+        V = jax.random.normal(kv, shape=(n_iter, d))
+        X, *_ = jax.vmap(flow, (0, 0, None))(U, V, param)
+        return X
+    ksam = jrnd.split(rng_key, n_chain)
+    samples = jax.vmap(one_chain)(ksam, (init_params, params))
+    # samples = jax.pmap(one_chain)(ksam, (init_params, params))
     return samples
 
 ### NUTS

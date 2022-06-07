@@ -37,16 +37,21 @@ def main(args):
     # schedule = optax.polynomial_schedule(1e-2, 1e-4, 1, 9000, 1000)
     # schedule = optax.piecewise_constant_schedule(init_value=1e-2,
     #     boundaries_and_scales={2000: .1, 8000: .1})
-    schedule = optax.exponential_decay(init_value=1e-3,
+    schedule = optax.exponential_decay(init_value=1e-2,
         transition_steps=4e3, decay_rate=.1, transition_begin=1e3)
     # schedule = 1e-3
     optim = optax.adam(schedule)
+
     maxiter = args.max_iter
+    # maxiter = 10
+    
     # print(f"\nUsing constant schedule {schedule} & maxiter {maxiter}.")
     print(f"\nUsing exponential decay schedule & maxiter {maxiter}.")
 
     n_epochs = args.epoch
     [batch_iter, batch_size] = args.batch_shape
+    # n_epochs = 10
+    # batch_iter, batch_size = 1, 16
     tol = args.tol
 
     # non_lin = 'tanh'
@@ -73,6 +78,10 @@ def main(args):
     #     optim, N_PARAM, n_flow, n_hidden, non_lin, norm,
     #     n_iter, n_chain, n_epochs, batch_size, batch_iter, tol, maxiter)
 
+    maxiter = args.max_iter
+    n_epochs = args.epoch
+    [batch_iter, batch_size] = args.batch_shape
+
     non_lin = 'tanh'
     n_hidden = [N_PARAM] * 2
     n_flow = 4
@@ -88,7 +97,7 @@ def main(args):
     #     optim, N_PARAM, n_flow, n_hidden, non_lin,
     #     n_warm, n_iter, n_chain, True, batch_size, batch_iter, tol, maxiter)
 
-    jnp.savez('banana.npz', 
+    jnp.savez(f'banana_{n_epochs}.npz', 
         ess_samples=ess_samples, nuts_samples=nuts_samples,
         atess_4x2_samples=atess_4x2_samples, #atess_2x1_samples=atess_2x1_samples, atess_20_samples=atess_20_samples,
         neutra_tanh_samples=neutra_tanh_samples, #neutra_elu_samples=neutra_elu_samples,
