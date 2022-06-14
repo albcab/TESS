@@ -40,67 +40,33 @@ def main(args):
     schedule = optax.exponential_decay(init_value=1e-2,
         transition_steps=4e3, decay_rate=.1, transition_begin=1e3)
     # schedule = 1e-3
-    optim = optax.adam(schedule)
-
     maxiter = args.max_iter
-    # maxiter = 10
-    
     # print(f"\nUsing constant schedule {schedule} & maxiter {maxiter}.")
     print(f"\nUsing exponential decay schedule & maxiter {maxiter}.")
+    optim = optax.adam(schedule)
 
     n_epochs = args.epoch
     [batch_iter, batch_size] = args.batch_shape
-    # n_epochs = 10
-    # batch_iter, batch_size = 1, 16
     tol = args.tol
+    flow = args.flow
+    distance = args.distance
+    non_lin = args.non_linearity
+    n_hidden = [args.n_hidden_units] * args.n_hidden
+    num_bins = args.num_bins
+    n_flow = args.n_flow
 
-    # non_lin = 'tanh'
-    # n_hidden = [N_PARAM] * 1
-    # n_flow = 2
-    # norm = False
-    # atess_2x1_samples = run_atess(ksam, dist.logprob_fn, dist.init_params,
-    #     optim, N_PARAM, n_flow, n_hidden, non_lin, norm,
-    #     n_iter, n_chain, n_epochs, batch_size, batch_iter, tol, maxiter)
-    
-    non_lin = 'tanh'
-    n_hidden = [N_PARAM] * 2
-    n_flow = 4
-    norm = False
-    atess_4x2_samples = run_atess(ksam, dist.logprob_fn, dist.init_params,
-        optim, N_PARAM, n_flow, n_hidden, non_lin, norm,
+    atess_samples, atess_flow_samples = run_atess(ksam, dist.logprob_fn, dist.init_params, 
+        flow, distance, optim, N_PARAM, n_flow, n_hidden, non_lin, num_bins,
         n_iter, n_chain, n_epochs, batch_size, batch_iter, tol, maxiter)
 
-    # non_lin = 'tanh'
-    # n_hidden = [20] * 2
-    # n_flow = 1
-    # norm = False
-    # atess_20_samples = run_atess(ksam, dist.logprob_fn, dist.init_params,
-    #     optim, N_PARAM, n_flow, n_hidden, non_lin, norm,
-    #     n_iter, n_chain, n_epochs, batch_size, batch_iter, tol, maxiter)
+    neutra_samples, neutra_flow_samples = run_neutra(ksam, dist.logprob_fn, dist.init_params, 
+        flow, distance, optim, N_PARAM, n_flow, n_hidden, non_lin, num_bins,
+        n_warm, n_iter, n_chain, True, batch_size, batch_iter, tol, maxiter)
 
-    maxiter = args.max_iter
-    n_epochs = args.epoch
-    [batch_iter, batch_size] = args.batch_shape
-
-    non_lin = 'tanh'
-    n_hidden = [N_PARAM] * 2
-    n_flow = 4
-    invert = True
-    neutra_tanh_samples = run_neutra(ksam, dist.logprob_fn, dist.init_params, 
-        optim, N_PARAM, n_flow, n_hidden, non_lin,
-        n_warm, n_iter, n_chain, True, batch_size, batch_iter, tol, maxiter, invert)
-
-    # non_lin = 'elu'
-    # n_hidden = [N_PARAM] * 2
-    # n_flow = 4
-    # neutra_elu_samples = run_neutra(ksam, dist.logprob_fn, dist.init_params, 
-    #     optim, N_PARAM, n_flow, n_hidden, non_lin,
-    #     n_warm, n_iter, n_chain, True, batch_size, batch_iter, tol, maxiter)
-
-    jnp.savez(f'banana_{n_epochs}.npz', 
+    jnp.savez(f'banana_{flow}_{distance}_{non_lin}_{n_epochs}.npz', 
         ess_samples=ess_samples, nuts_samples=nuts_samples,
-        atess_4x2_samples=atess_4x2_samples, #atess_2x1_samples=atess_2x1_samples, atess_20_samples=atess_20_samples,
-        neutra_tanh_samples=neutra_tanh_samples, #neutra_elu_samples=neutra_elu_samples,
+        atess_samples=atess_samples, atess_flow_samples=atess_flow_samples,
+        neutra_samples=neutra_samples, neutra_flow_samples=neutra_flow_samples,
     )
 
 if __name__ == "__main__":
@@ -108,13 +74,19 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument('-t', '--tol', type=float, default=1e-1)
     parser.add_argument('-m', '--max-iter', type=int, default=1.1e4)
-    parser.add_argument('-e', '--epoch', type=int, default=5)
-    # parser.add_argument('-b', '--batch-shape', type=int, nargs=2, default=[100, 10_000])
-    parser.add_argument('-b', '--batch-shape', type=int, nargs=2, default=[1, 5_000])
+    parser.add_argument('-e', '--epoch', type=int, default=2)
+    parser.add_argument('-b', '--batch-shape', type=int, nargs=2, default=[10, 256])
+    parser.add_argument('-nl', '--non-linearity', type=str, default='elu')
+    parser.add_argument('-f', '--flow', type=str, default='coupling')
+    parser.add_argument('-d', '--distance', type=str, default='kld')
+    parser.add_argument('-nh', '--n-hidden', type=int, default=2)
+    parser.add_argument('-nf', '--n-flow', type=int, default=2)
+    parser.add_argument('-nhu', '--n-hidden-units', type=int, default=N_PARAM)
+    parser.add_argument('-nb', '--num-bins', type=int, default=None)
     parser.add_argument(
         "-s", "--sampling-param", type=int, nargs=3,
         help="Sampling parameters [n_chain, n_warm, n_iter]",
-        default=[10, 2000, 10_000]
+        default=[1, 1_000, 10_000]
     )
     args = parser.parse_args()
     main(args)

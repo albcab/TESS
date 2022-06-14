@@ -79,11 +79,9 @@ class atransp_elliptical_slice:
             param = param_init(ko, p)
             param, err = optimize(param, reverse, optim, tol, maxiter, ko, U, batch_iter, batch_size)
 
-            # #starting from flow observation
-            # ku, kv = jax.random.split(ko)
-            # u = unraveler_fn(jax.random.normal(ku, (d,)))
-            # v = jax.random.normal(kv, (d,))
-            # position, *_ = flow(u, v, param)
+            #starting from flow observation
+            v = jax.random.normal(ku, (d,))
+            position, *_ = flow(position, v, param)
 
             return SliceState(position, 0), param, err
 
@@ -203,7 +201,7 @@ def tess_proposal(
         u, m = ellipsis(u_position, momentum, theta)
         #step 9: get new position
         slice = slice_fn(u, m)
-        p, m = T(u, m)
+        # p, m = T(u, m)
         #step 10-20: acceptance
         # slice = slice_fn(p, m)
 
@@ -213,18 +211,19 @@ def tess_proposal(
             theta = jax.random.uniform(thetak, minval=theta_min, maxval=theta_max)
             u, m = ellipsis(u_position, momentum, theta)
             slice = slice_fn(u, m)
-            p, m = T(u, m)
+            # p, m = T(u, m)
             # slice = slice_fn(p, m)
             theta_min = jnp.where(theta < 0, theta, theta_min)
             theta_max = jnp.where(theta > 0, theta, theta_max)
             subiter += 1
-            return rng, slice, subiter, theta, theta_min, theta_max, p, m
+            return rng, slice, subiter, theta, theta_min, theta_max, u, m
 
-        _, slice, subiter, theta, *_, position, momentum = jax.lax.while_loop(
-            lambda vals: (vals[1] <= logy) | jnp.isinf(ravel_pytree(vals[-2])[0]).any(), 
+        _, slice, subiter, theta, *_, u, m = jax.lax.while_loop(
+            lambda vals: (vals[1] <= logy) | (~jnp.isfinite(vals[1])), 
             while_fun, 
-            (rng_key, slice, 1, theta, theta_min, theta_max, p, m)
+            (rng_key, slice, 1, theta, theta_min, theta_max, u, m)
         )
+        position, momentum = T(u, m)
         return (SliceState(position, slice), 
             SliceInfo(momentum, theta, subiter))
 

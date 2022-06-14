@@ -2,7 +2,7 @@ import abc
 
 import jax
 import jax.numpy as jnp
-from jax.scipy.stats import norm, gamma, bernoulli
+from jax.scipy.stats import norm, gamma, bernoulli, t
 from jax.experimental.ode import odeint
 from jax.scipy.special import expit
 
@@ -347,6 +347,26 @@ class NealsFunnel(BiDistribution):
     def logprob(self, x1, x2):
         return norm.logpdf(x1, 0.0, 1.) + norm.logpdf(
             x2, 0., jnp.exp(2. * x1)
+        )
+
+class StudentT(BiDistribution):
+    def __init__(self, df=5.) -> None:
+        super().__init__()
+        self._df = df
+    
+    def logprob(self, x1, x2):
+        return t.logpdf(x1, self._df) + t.logpdf(x2, self._df)
+
+class MixtureNormal(BiDistribution):
+    def __init__(self, w1=.2, w2=.8) -> None:
+        super().__init__()
+        self._w1 = w1
+        self._w2 = w2
+
+    def logprob(self, x1, x2):
+        return jnp.log(
+            self._w1 * norm.pdf(x1, 1., .5) * norm.pdf(x2, 1., .5)
+            + self._w2 * norm.pdf(x1, -2., .1) * norm.pdf(x2, -2., .1)
         )
 
 

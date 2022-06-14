@@ -2,8 +2,6 @@ import argparse
 import os
 os.environ['XLA_FLAGS'] = '--xla_force_host_platform_device_count=10'
 
-import warnings
-
 import jax.numpy as jnp
 import jax.random as jrnd
 import optax
@@ -54,14 +52,15 @@ def main(args):
     distance = args.distance
     non_lin = args.non_linearity
     n_hidden = [args.n_hidden_units] * args.n_hidden
+    num_bins = args.num_bins
     n_flow = args.n_flow
 
     atess_samples, atess_flow_samples = run_atess(ksam, dist.logprob_fn, dist.init_params, 
-        flow, distance, optim, N_PARAM, n_flow, n_hidden, non_lin,
+        flow, distance, optim, N_PARAM, n_flow, n_hidden, non_lin, num_bins,
         n_iter, n_chain, n_epochs, batch_size, batch_iter, tol, maxiter)
 
     neutra_samples, neutra_flow_samples = run_neutra(ksam, dist.logprob_fn, dist.init_params, 
-        flow, distance, optim, N_PARAM, n_flow, n_hidden, non_lin,
+        flow, distance, optim, N_PARAM, n_flow, n_hidden, non_lin, num_bins,
         n_warm, n_iter, n_chain, True, batch_size, batch_iter, tol, maxiter)
 
     jnp.savez(f'nealsfunnel_{flow}_{distance}_{non_lin}_{n_epochs}.npz', 
@@ -75,18 +74,19 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument('-t', '--tol', type=float, default=1e-1)
     parser.add_argument('-m', '--max-iter', type=int, default=1.1e4)
-    parser.add_argument('-e', '--epoch', type=int, default=5)
-    parser.add_argument('-b', '--batch-shape', type=int, nargs=2, default=[20, 128])
-    parser.add_argument('-nl', '--non-linearity', type=str, default='tanh')
-    parser.add_argument('-f', '--flow', type=str, default='riaf')
+    parser.add_argument('-e', '--epoch', type=int, default=2)
+    parser.add_argument('-b', '--batch-shape', type=int, nargs=2, default=[10, 256])
+    parser.add_argument('-nl', '--non-linearity', type=str, default='elu')
+    parser.add_argument('-f', '--flow', type=str, default='coupling')
     parser.add_argument('-d', '--distance', type=str, default='kld')
     parser.add_argument('-nh', '--n-hidden', type=int, default=2)
     parser.add_argument('-nf', '--n-flow', type=int, default=2)
     parser.add_argument('-nhu', '--n-hidden-units', type=int, default=N_PARAM)
+    parser.add_argument('-nb', '--num-bins', type=int, default=None)
     parser.add_argument(
         "-s", "--sampling-param", type=int, nargs=3,
         help="Sampling parameters [n_chain, n_warm, n_iter]",
-        default=[10, 2000, 10_000]
+        default=[1, 1_000, 10_000]
     )
     args = parser.parse_args()
     main(args)

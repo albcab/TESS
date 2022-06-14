@@ -11,10 +11,10 @@ import pandas as pd
 
 from numpyro.diagnostics import print_summary
 
-from flows import inverse_autoreg, coupling_dense
+from flows import inverse_autoreg, coupling_latent, coupling_auto
 from distances import kullback_liebler, renyi_alpha
 from kernels import atransp_elliptical_slice, elliptical_slice, neutra
-from mcmc_utils import inference_loop, inference_loop0
+from mcmc_utils import inference_loop, inference_loop0, stein_disc
 
 import blackjax
 
@@ -27,10 +27,12 @@ non_lins = {
 }
 
 flows = {
-    'iaf': lambda n, f, h, nl: inverse_autoreg(n, f, h, nl, False),
-    'riaf': lambda n, f, h, nl: inverse_autoreg(n, f, h, nl, True),
-    'cdense': lambda n, f, h, nl: coupling_dense(n, f, h, nl, False),
-    'ncdense': lambda n, f, h, nl: coupling_dense(n, f, h, nl, True),
+    'iaf': lambda n, f, h, nl, _: inverse_autoreg(n, f, h, nl, False),
+    'riaf': lambda n, f, h, nl, _: inverse_autoreg(n, f, h, nl, True),
+    'latent': lambda n, f, h, nl, nb: coupling_latent(n, f, h, nl, False, nb),
+    'nlatent': lambda n, f, h, nl, nb: coupling_latent(n, f, h, nl, True, nb),
+    'coupling': lambda n, f, h, nl, nb: coupling_auto(n, f, h, nl, False, nb),
+    'ncoupling': lambda n, f, h, nl, nb: coupling_auto(n, f, h, nl, True, nb),
 }
 
 distances = {
@@ -63,6 +65,8 @@ def run_ess(
     tic2 = pd.Timestamp.now()
 
     print_summary(samples)
+    stein = stein_disc(samples, logprob_fn)
+    print(f"Stein U-, V-statistics={stein[0]}, {stein[1]}")
     print("Runtime for (T)ESS", tic2 - tic1)
     return samples
 
@@ -70,19 +74,22 @@ def run_ess(
 
 def run_atess(
     rng_key, logprob_fn, init_params, flow, distance,
-    optim, n, n_flow, n_hidden, non_linearity,
+    optim, n, n_flow, n_hidden, non_linearity, num_bins,
     n_iter, n_chain,
     n_epochs, batch_size, batch_iter, tol, maxiter,
 ):
     if flow in ['iaf', 'riaf'] and any([nh != n for nh in n_hidden]):
         warnings.warn('IAF flows always have dimension of hidden units same as params.')
+
+    if flow in ['iaf', 'riaf'] and num_bins:
+        warnings.warn('IAF cannot do rational quadratic splines.')
     
-    print(f"\nATESS w/ {n_flow} flows (flow: {flow}) - hidden layers={n_hidden} - {non_linearity} nonlinearity")
+    print(f"\nATESS w/ {n_flow} flows (flow: {flow}, splines? {num_bins is not None}) - hidden layers={n_hidden} - {non_linearity} nonlinearity")
     print(f"warmup & precond: {n_epochs} epochs - batches of size {batch_size} over {batch_iter} iter - tolerance {tol}")
     print(f"sampling: {n_chain} chains - {n_iter} samples each...")
 
     tic1 = pd.Timestamp.now()
-    param_init, flow, flow_inv = flows[flow](n, n_flow, n_hidden, non_lins[non_linearity])
+    param_init, flow, flow_inv = flows[flow](n, n_flow, n_hidden, non_lins[non_linearity], num_bins)
     reverse, forward = distances[distance](logprob_fn, n, flow, flow_inv)
     atess, warm_fn = atransp_elliptical_slice(logprob_fn, optim, n, param_init, flow, flow_inv, reverse, forward)
     def one_chain(ksam, init_x):
@@ -103,7 +110,11 @@ def run_atess(
     flow_samples = get_flow_samples(ksam[-1], flow, params, n_chain, n_iter, n, init_params)
 
     print_summary(samples)
+    stein = stein_disc(samples, logprob_fn)
+    print(f"Stein U-, V-statistics={stein[0]}, {stein[1]}")
     print_summary(flow_samples)
+    stein = stein_disc(flow_samples, logprob_fn)
+    print(f"(Flow) Stein U-, V-statistics={stein[0]}, {stein[1]}")
     print("Runtime for ATESS", tic2 - tic1)
     return samples, flow_samples
 
@@ -111,22 +122,25 @@ def run_atess(
 
 def run_neutra(
     rng_key, logprob_fn, init_params, flow, distance,
-    optim, n, n_flow, n_hidden, non_linearity,
+    optim, n, n_flow, n_hidden, non_linearity, num_bins,
     n_warm, n_iter, n_chain, nuts,
     batch_size, batch_iter, tol, maxiter, 
 ):
     if flow in ['iaf', 'riaf'] and any([nh != n for nh in n_hidden]):
         warnings.warn('IAF flows always have dimension of hidden units same as params.')
+
+    if flow in ['iaf', 'riaf'] and num_bins:
+        warnings.warn('IAF cannot do rational quadratic splines.')
     
-    if flow in ['ncdense', 'cdense']:
+    if flow in ['latent', 'nlatent']:
         warnings.warn('NeuTra samples for fully coupled dense flows including latent parameters are irrelevant, see code.')
 
-    print(f"\nNeuTra w/ {n_flow} (flow: {flow}) flows - hidden layers={n_hidden} - {non_linearity} nonlinearity")
+    print(f"\nNeuTra w/ {n_flow} (flow: {flow}, splines? {num_bins is not None}) flows - hidden layers={n_hidden} - {non_linearity} nonlinearity")
     print(f"precond: batches of {batch_size} atoms over {batch_iter} iter - tolerance {tol}")
     print(f"sampling: {n_chain} chains - {n_warm} warmup - {n_iter} samples...")
 
     tic1 = pd.Timestamp.now()
-    param_init, flow, flow_inv = flows[flow](n, n_flow, n_hidden, non_lins[non_linearity])
+    param_init, flow, flow_inv = flows[flow](n, n_flow, n_hidden, non_lins[non_linearity], num_bins)
     reverse, _ = distances[distance](logprob_fn, n, flow, flow_inv)
     init_fn = neutra(logprob_fn, optim, n, param_init, flow, reverse)
     def one_chain(ksam, init_x):
@@ -144,7 +158,11 @@ def run_neutra(
     flow_samples = get_flow_samples(ksam[-1], flow, params, n_chain, n_iter, n, init_params)
 
     print_summary(samples)
+    stein = stein_disc(samples, logprob_fn)
+    print(f"Stein U-, V-statistics={stein[0]}, {stein[1]}")
     print_summary(flow_samples)
+    stein = stein_disc(flow_samples, logprob_fn)
+    print(f"(Flow) Stein U-, V-statistics={stein[0]}, {stein[1]}")
     print("Runtime for NeuTra", tic2 - tic1)
     return samples, flow_samples
 
@@ -185,6 +203,8 @@ def run_nuts(
     tic2 = pd.Timestamp.now()
 
     print_summary(samples)
+    stein = stein_disc(samples, logprob_fn)
+    print(f"Stein U-, V-statistics={stein[0]}, {stein[1]}")
     print("Runtime for NUTS", tic2 - tic1)
     return samples
 
