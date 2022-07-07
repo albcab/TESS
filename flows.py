@@ -33,10 +33,26 @@ def make_iaf(d, n_hidden, non_linearity):
 
         
 def make_dense(d, hidden_dims, norm, non_linearity, num_bins):
-    layers = [hk.nets.MLP(hidden_dims, 
-        w_init=hk.initializers.VarianceScaling(.01), b_init=hk.initializers.RandomNormal(.01), 
-        activation=non_linearity, activate_final=True)
-    ]
+    # layers = [hk.nets.MLP(hidden_dims, 
+    #     w_init=hk.initializers.VarianceScaling(.01), b_init=hk.initializers.RandomNormal(.01), 
+    #     activation=non_linearity, activate_final=True)
+    # ]
+    # if num_bins:
+    #     layers.append(
+    #         hk.Linear(3 * num_bins + 1, w_init=hk.initializers.VarianceScaling(.01), b_init=hk.initializers.RandomNormal(.01))
+    #     )
+    # else:
+    #     layers.extend([
+    #         hk.Linear(2 * d, w_init=hk.initializers.VarianceScaling(.01), b_init=hk.initializers.RandomNormal(.01)),
+    #         hk.Reshape((2, d), preserve_dims=-1)
+    #     ])
+    # return hk.Sequential(layers)
+    layers = []
+    for hd in hidden_dims:
+        layers.append(hk.Linear(hd, w_init=hk.initializers.VarianceScaling(.01), b_init=hk.initializers.RandomNormal(.01)))
+        if norm:
+            layers.append(hk.LayerNorm(-1, True, True))
+        layers.append(non_linearity)
     if num_bins:
         layers.append(
             hk.Linear(3 * num_bins + 1, w_init=hk.initializers.VarianceScaling(.01), b_init=hk.initializers.RandomNormal(.01))
@@ -47,15 +63,6 @@ def make_dense(d, hidden_dims, norm, non_linearity, num_bins):
             hk.Reshape((2, d), preserve_dims=-1)
         ])
     return hk.Sequential(layers)
-    # layers = []
-    # for hd in hidden_dims:
-    #     layers.append(hk.Linear(hd, w_init=hk.initializers.VarianceScaling(.1), b_init=hk.initializers.RandomNormal(.1)))
-    #     if norm:
-    #         layers.append(hk.LayerNorm(-1, True, True))
-    #     layers.append(non_linearity)
-    # layers.append(hk.Linear(2 * d, w_init=hk.initializers.VarianceScaling(.1), b_init=hk.initializers.RandomNormal(.1)))
-    # layers.append(hk.Reshape((2, d), preserve_dims=-1))
-    # return hk.Sequential(layers)
 
 
 class coupling_auto:

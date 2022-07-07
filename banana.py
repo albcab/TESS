@@ -76,8 +76,8 @@ if __name__ == "__main__":
     parser.add_argument('-m', '--max-iter', type=int, default=1.1e4)
     parser.add_argument('-e', '--epoch', type=int, default=2)
     parser.add_argument('-b', '--batch-shape', type=int, nargs=2, default=[10, 256])
-    parser.add_argument('-nl', '--non-linearity', type=str, default='elu')
-    parser.add_argument('-f', '--flow', type=str, default='coupling')
+    parser.add_argument('-nl', '--non-linearity', type=str, default='relu')
+    parser.add_argument('-f', '--flow', type=str, default='ncoupling')
     parser.add_argument('-d', '--distance', type=str, default='kld')
     parser.add_argument('-nh', '--n-hidden', type=int, default=2)
     parser.add_argument('-nf', '--n-flow', type=int, default=2)
@@ -86,7 +86,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "-s", "--sampling-param", type=int, nargs=3,
         help="Sampling parameters [n_chain, n_warm, n_iter]",
-        default=[1, 1_000, 10_000]
+        default=[10, 1_000, 1_000]
     )
     args = parser.parse_args()
     main(args)

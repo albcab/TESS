@@ -234,6 +234,7 @@ class PredatorPrey:
             mxstep=1000
         )
         pp = jnp.clip(pp, a_min=1e-6)
+
         # term = diffrax.ODETerm(dxy_dt)
         # solver = diffrax.Dopri5()
         # # solver = diffrax.Tsit5()
@@ -251,77 +252,77 @@ class PredatorPrey:
 
     def initialize_model(self, rng_key, n_chain):
     
-        (init_params, *_), self.potential_fn, *_ = initialize_model(
-            rng_key, self.model, model_kwargs={'y': self.data},
-        )
-        kchain = jax.random.split(rng_key, n_chain)
-        flat, unravel_fn = jax.flatten_util.ravel_pytree(init_params)
-        self.init_params = jax.vmap(lambda k: unravel_fn(jax.random.normal(k, flat.shape) * .1))(kchain)
-        # self.init_params = jax.vmap(lambda k: unravel_fn(flat))(kchain)
-
-    def logprob_fn(self, params):
-        return -self.potential_fn(params)
-
-    #     self.init_params = {
-    #         name: jax.random.normal(k, shape=(n_chain,)) * .1 for name, k in zip(
-    #             ['lalpha', 'lbeta', 'lgamma', 'ldelta', 'lsd_pred', 'lsd_prey', 'lpred_init', 'lprey_init'],
-    #             jax.random.split(rng_key, 8)
-    #         )
-    #     }
-
-    # def logprob(self, 
-    #     lpred_init, lprey_init,
-    #     lalpha, lbeta, lgamma, ldelta, 
-    #     lsd_pred, lsd_prey,
-    # ):
-    #     lsd = jnp.array([lsd_pred, lsd_prey])
-    #     logsd_norm = (lsd - self.sd_mean) / self.sd_scale
-    #     sd = jnp.exp(lsd)
-
-    #     lparam = jnp.array([lalpha, lbeta, lgamma, ldelta])
-    #     param = jnp.exp(lparam)
-    #     param_norm = (param - self.param_mean) / self.param_scale
-
-    #     lxy_init = jnp.array([lpred_init, lprey_init])
-    #     init_norm = (lxy_init - self.init_mean) / self.init_scale
-    #     xy_init = jnp.exp(lxy_init)
-
-    #     # ts = jnp.arange(float(self.time.shape[0]))
-    #     # xy = odeint(dpp_dt, 
-    #     #     xy_init, ts, *param,
-    #     #     rtol=1e-6, atol=1e-5, 
-    #     #     mxstep=1000,
-    #     # )
-    #     # xy = jnp.clip(xy, a_min=1e-6)
-    #     term = diffrax.ODETerm(dxy_dt)
-    #     # solver = diffrax.Dopri5()
-    #     solver = diffrax.Tsit5()
-    #     # solver = diffrax.Dopri8()
-    #     id_print(xy_init)
-    #     id_print(param)
-    #     xy = diffrax.diffeqsolve(term, solver, t0=0, t1=self.time.shape[0], dt0=1, y0=xy_init, args=param).ys
-    #     # xy = jnp.clip(xy, a_min=1e-6)
-    #     logdata_norm = (jnp.log(self.data) - jnp.log(xy)) / sd
-    #     return (
-    #         -.5 * jnp.dot(logsd_norm, logsd_norm) #- jnp.sum(sd) #lognormal sd
-    #         + jnp.sum( #truncated normal params (assume params within bounds)
-    #             # - jnp.log(self.param_scale) 
-    #             + jax.vmap(norm.logpdf)(param_norm) 
-    #             # - jax.vmap(lambda x: jnp.log(1. - norm.cdf(x)))(-self.param_mean / self.param_scale)
-    #         )
-    #         + jnp.sum(lparam) #vol change from evaluating param at log
-    #         -.5 * jnp.dot(init_norm, init_norm) #- jnp.sum(xy_init) #lognormal pred-prey at time 0
-    #         -.5 * jnp.sum(logdata_norm ** 2) - jnp.sum(lsd) * self.data.shape[0] #lognormal likelihood
+    #     (init_params, *_), self.potential_fn, *_ = initialize_model(
+    #         rng_key, self.model, model_kwargs={'y': self.data},
     #     )
+    #     kchain = jax.random.split(rng_key, n_chain)
+    #     flat, unravel_fn = jax.flatten_util.ravel_pytree(init_params)
+    #     self.init_params = jax.vmap(lambda k: unravel_fn(jax.random.normal(k, flat.shape)))(kchain)
+    #     # self.init_params = jax.vmap(lambda k: unravel_fn(flat))(kchain)
 
     # def logprob_fn(self, params):
-    #     return self.logprob(**params)
+    #     return -self.potential_fn(params)
+
+        self.init_params = {
+            name: jax.random.normal(k, shape=(n_chain,)) * .1 for name, k in zip(
+                ['lalpha', 'lbeta', 'lgamma', 'ldelta', 'lsd_pred', 'lsd_prey', 'lpred_init', 'lprey_init'],
+                jax.random.split(rng_key, 8)
+            )
+        }
+
+    def logprob(self, 
+        lpred_init, lprey_init,
+        lalpha, lbeta, lgamma, ldelta, 
+        lsd_pred, lsd_prey,
+    ):
+        lsd = jnp.array([lsd_pred, lsd_prey])
+        logsd_norm = (lsd - self.sd_mean) / self.sd_scale
+        sd = jnp.exp(lsd)
+
+        lparam = jnp.array([lalpha, lbeta, lgamma, ldelta])
+        param = jnp.exp(lparam)
+        param_norm = (param - self.param_mean) / self.param_scale
+
+        lxy_init = jnp.array([lpred_init, lprey_init])
+        init_norm = (lxy_init - self.init_mean) / self.init_scale
+        xy_init = jnp.exp(lxy_init)
+
+        # ts = jnp.arange(float(self.time.shape[0]))
+        # xy = odeint(dpp_dt, 
+        #     xy_init, ts, *param,
+        #     rtol=1e-6, atol=1e-5, 
+        #     mxstep=1000,
+        # )
+        # xy = jnp.clip(xy, a_min=1e-6)
+        term = diffrax.ODETerm(dxy_dt)
+        # solver = diffrax.Dopri5()
+        solver = diffrax.Tsit5()
+        # solver = diffrax.Dopri8()
+        # id_print(xy_init)
+        # id_print(param)
+        xy = diffrax.diffeqsolve(term, solver, t0=0, t1=self.time.shape[0], dt0=1, y0=xy_init, args=param).ys
+        xy = jnp.clip(xy, a_min=1e-6)
+        logdata_norm = (jnp.log(self.data) - jnp.log(xy)) / sd
+        return (
+            -.5 * jnp.dot(logsd_norm, logsd_norm) #- jnp.sum(sd) #lognormal sd
+            + jnp.sum( #truncated normal params (assume params within bounds)
+                # - jnp.log(self.param_scale) 
+                + jax.vmap(norm.logpdf)(param_norm) 
+                # - jax.vmap(lambda x: jnp.log(1. - norm.cdf(x)))(-self.param_mean / self.param_scale)
+            )
+            + jnp.sum(lparam) #vol change from evaluating param at log
+            -.5 * jnp.dot(init_norm, init_norm) #- jnp.sum(xy_init) #lognormal pred-prey at time 0
+            -.5 * jnp.sum(logdata_norm ** 2) - jnp.sum(lsd) * self.data.shape[0] #lognormal likelihood
+        )
+
+    def logprob_fn(self, params):
+        return self.logprob(**params)
     
     # def potential_fn(self, params):
     #     return -self.logprob(**params)
 
 
-class BiDistribution(metaclass=abc.ABCMeta):
+class Distribution(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def logprob(self, x1, x2):
@@ -329,6 +330,21 @@ class BiDistribution(metaclass=abc.ABCMeta):
 
     def logprob_fn(self, x):
         return self.logprob(**x)
+
+    @abc.abstractmethod
+    def initialize_model(self, rng_key, n_chain):
+        """defines the initialization of paramters"""
+
+
+# class BiDistribution(metaclass=abc.ABCMeta):
+class BiDistribution(Distribution):
+
+    # @abc.abstractmethod
+    # def logprob(self, x1, x2):
+    #     """defines the log probability function"""
+
+    # def logprob_fn(self, x):
+    #     return self.logprob(**x)
 
     def initialize_model(self, rng_key, n_chain):
         ki1, ki2 = jax.random.split(rng_key)
@@ -343,11 +359,24 @@ class Banana(BiDistribution):
             x2, 1 / 4 * x1**2, 1.0
         )
 
-class NealsFunnel(BiDistribution):
+# class NealsFunnel(BiDistribution):
+class NealsFunnel(Distribution):
+
+    def __init__(self, d=2):
+        super().__init__()
+        self._d = d
+
     def logprob(self, x1, x2):
-        return norm.logpdf(x1, 0.0, 1.) + norm.logpdf(
+        return norm.logpdf(x1, 0.0, 1.) + jnp.sum(norm.logpdf(
             x2, 0., jnp.exp(2. * x1)
-        )
+        ))
+
+    def initialize_model(self, rng_key, n_chain):
+        ki1, ki2 = jax.random.split(rng_key)
+        self.init_params = {
+            'x1': jax.random.normal(ki1, shape=(n_chain,)), 
+            'x2': jax.random.normal(ki2, shape=(n_chain, self._d-1))
+        }
 
 class StudentT(BiDistribution):
     def __init__(self, df=5.) -> None:

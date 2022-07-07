@@ -4,7 +4,6 @@ import jax
 import jax.numpy as jnp
 import jax.random as jrnd
 from jax.flatten_util import ravel_pytree
-from numpy import ravel
 
 
 def inference_loop(rng, init_state, kernel, n_iter, param):
@@ -48,18 +47,37 @@ def stein_disc(X, logprob_fn, beta=-1/2) -> Tuple:
         grad = jax.grad(logprob_fn)
     beta = -beta
 
+    # gradk = lambda diff, dot_prod: -2 * beta * (1 + dot_prod) ** (-beta - 1) * diff
+    # gradgradk = lambda diff, dot_prod: -2 * beta * jnp.sum(-diff ** 2 * 2 * (-beta - 1) * (1 + dot_prod) ** (-beta - 2) - (1 + dot_prod) ** (-beta - 1))
+
+    # def disc2(x, x_):
+    #     diff = sub(x, x_)
+    #     dot_prod = jnp.dot(diff, diff)
+    #     dx = grad(x)
+    #     dx_ = grad(x_)
+    #     return (
+    #         jnp.dot(dx, dx_) * (1 + dot_prod) ** (-beta)
+    #         + jnp.dot(dx, -gradk(diff, dot_prod)) + jnp.dot(dx_, gradk(diff, dot_prod))
+    #         + gradgradk(diff, dot_prod)
+    #     )
+
     def disc(x, x_):
         diff = sub(x, x_)
         dot_prod = jnp.dot(diff, diff)
         dx = grad(x)
         dx_ = grad(x_)
         return (
-            4 * beta * (beta+1) * dot_prod / (1 + dot_prod) ** (beta + 2)
-            + 2 * beta * (d + jnp.dot(dx - dx_, diff)) / (1 + dot_prod) ** (1 + beta)
-            + jnp.dot(dx, dx_) / (1 + dot_prod) ** beta
+            -4 * beta * (beta+1) * dot_prod / ((1 + dot_prod) ** (beta + 2))
+            + 2 * beta * (d + jnp.dot(dx - dx_, diff)) / ((1 + dot_prod) ** (1 + beta))
+            + jnp.dot(dx, dx_) / ((1 + dot_prod) ** beta)
         )
 
     _disc = jax.vmap(disc, (None, 0))
-    mc_sum = jax.vmap(_disc, (0, None))(X, X).sum()
-    # mc_sum = map(lambda i: _disc(jnp.asarray(X)[i], X).sum(), jnp.arange(T)).sum()
-    return (mc_sum - jax.vmap(lambda x: jnp.dot(grad(x), grad(x)) + d)(X).sum()) / (T * (T-1)), mc_sum / T**2
+    # _disc2 = jax.vmap(disc2, (None, 0))
+    # try:
+    #     mc_sum = jax.vmap(_disc, (0, None))(X, X).sum()
+    #     mc_sum2 = jax.vmap(_disc2, (0, None))(X, X).sum()
+    #     print(mc_sum, mc_sum2)
+    # except RuntimeError:
+    mc_sum = jax.lax.map(lambda x: _disc(x, X).sum(), X).sum()
+    return (mc_sum - jax.vmap(lambda x: disc(x, x))(X).sum()) / (T * (T-1)), mc_sum / T**2
