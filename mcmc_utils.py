@@ -1,5 +1,7 @@
 from typing import Callable, Tuple
 
+import numpy as np
+
 import jax
 import jax.numpy as jnp
 import jax.random as jrnd
@@ -76,8 +78,62 @@ def stein_disc(X, logprob_fn, beta=-1/2) -> Tuple:
     # _disc2 = jax.vmap(disc2, (None, 0))
     # try:
     #     mc_sum = jax.vmap(_disc, (0, None))(X, X).sum()
-    #     mc_sum2 = jax.vmap(_disc2, (0, None))(X, X).sum()
-    #     print(mc_sum, mc_sum2)
+    #     # mc_sum2 = jax.vmap(_disc2, (0, None))(X, X).sum()
+    #     # print(mc_sum, mc_sum2)
     # except RuntimeError:
     mc_sum = jax.lax.map(lambda x: _disc(x, X).sum(), X).sum()
     return (mc_sum - jax.vmap(lambda x: disc(x, x))(X).sum()) / (T * (T-1)), mc_sum / T**2
+
+
+def _fft_next_fast_len(target):
+    # find the smallest number >= N such that the only divisors are 2, 3, 5
+    # works just like scipy.fftpack.next_fast_len
+    if target <= 2:
+        return target
+    while True:
+        m = target
+        while m % 2 == 0:
+            m //= 2
+        while m % 3 == 0:
+            m //= 3
+        while m % 5 == 0:
+            m //= 5
+        if m == 1:
+            return target
+        target += 1
+
+def autocorrelation(x, axis=0):
+    """
+    Computes the autocorrelation of samples at dimension ``axis``.
+
+    :param numpy.ndarray x: the input array.
+    :param int axis: the dimension to calculate autocorrelation.
+    :return: autocorrelation of ``x``.
+    :rtype: numpy.ndarray
+    """
+    # Ref: https://en.wikipedia.org/wiki/Autocorrelation#Efficient_computation
+    # Adapted from Stan implementation
+    # https://github.com/stan-dev/math/blob/develop/stan/math/prim/mat/fun/autocorrelation.hpp
+    N = x.shape[axis]
+    M = _fft_next_fast_len(N)
+    M2 = 2 * M
+
+    # transpose axis with -1 for Fourier transform
+    x = np.swapaxes(x, axis, -1)
+
+    # centering x
+    centered_signal = x - x.mean(axis=-1, keepdims=True)
+
+    # Fourier transform
+    freqvec = np.fft.rfft(centered_signal, n=M2, axis=-1)
+    # take square of magnitude of freqvec (or freqvec x freqvec*)
+    freqvec_gram = freqvec * np.conjugate(freqvec)
+    # inverse Fourier transform
+    autocorr = np.fft.irfft(freqvec_gram, n=M2, axis=-1)
+
+    # truncate and normalize the result, then transpose back to original shape
+    autocorr = autocorr[..., :N]
+    # autocorr = autocorr / np.arange(N, 0.0, -1)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        autocorr = autocorr / autocorr[..., :1] / 2
+    return np.swapaxes(autocorr, axis, -1)

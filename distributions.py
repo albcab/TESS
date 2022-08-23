@@ -17,7 +17,22 @@ from numpyro.infer.initialization import init_to_median, init_to_value
 
 import diffrax
 
-from centering import projectiongradient_to_numpyro
+from Extras.centering import projectiongradient_to_numpyro
+
+
+class Distribution(metaclass=abc.ABCMeta):
+
+    @abc.abstractmethod
+    def logprob(self, x1, x2):
+        """defines the log probability function"""
+
+    def logprob_fn(self, x):
+        return self.logprob(**x)
+
+    @abc.abstractmethod
+    def initialize_model(self, rng_key, n_chain):
+        """defines the initialization of paramters"""
+
 
 
 class RegimeSwitchHMM:
@@ -95,105 +110,124 @@ class RegimeMixtureDistribution(dist.Distribution):
         return jnp.zeros(sample_shape + self.event_shape)
 
 
-class HorseshoeLogisticReg:
-    def __init__(
-        self, X, y,
-        alpha_a = .5, beta_a = .5, 
-        alpha_b = .5, beta_b = .5,
-    ) -> None:
+# class HorseshoeLogisticReg:
+#     def __init__(
+#         self, X, y,
+#         alpha_a = .5, beta_a = .5, 
+#         alpha_b = .5, beta_b = .5,
+#     ) -> None:
+#         self.X = X
+#         self.y = y
+#         self.n, self.d = X.shape
+#         self.param_tau = jnp.array([alpha_a, alpha_b])
+#         self.param_lamda = jnp.array([beta_a, beta_b])
+
+#     def model(self, y=None): 
+#         plate_obs = numpyro.plate('i', self.n, dim=-1)
+#         plate_reg = numpyro.plate('j', self.d, dim=-1)
+        
+#         # tau = numpyro.sample('tau', dist.HalfCauchy(1.))
+#         # tau = numpyro.sample('tau', dist.LogNormal(0., 1.))
+#         tau = numpyro.sample('tau', dist.Gamma(*self.param_tau))
+        
+#         with plate_reg:
+#             # lamda = numpyro.sample('lamda', dist.HalfCauchy(1.))
+#             # lamda = numpyro.sample('lamda', dist.LogNormal(0., 1.))
+#             lamda = numpyro.sample('lamda', dist.Gamma(*self.param_lamda))
+
+#             beta = numpyro.sample('beta', dist.Normal(0., 1.)) #noncentered
+#             # beta = numpyro.sample('beta', dist.Normal(0., tau * lamda)) #centered
+            
+#         logit = jnp.sum(self.X * (tau * beta * lamda), axis=1) #noncentered
+#         # logit = jnp.sum(self.X * beta, axis=1) #centered
+#         p = jnp.clip(expit(logit), a_min=1e-6, a_max=1-1e-6)
+#         # p = expit(logit)
+#         with plate_obs:
+#             numpyro.sample('obs', dist.Bernoulli(p), obs=y)
+
+#     def center_model(self, rng_key, optim, n_atoms, n_iter):
+#         def model(y=None):
+#             plate_obs = numpyro.plate('i', self.n, dim=-1)
+#             plate_reg = numpyro.plate('j', self.d, dim=-1)
+            
+#             tau = numpyro.sample('tau', dist.InverseGamma(*self.param_tau))
+
+#             lamda = numpyro.sample('lamda', dist.InverseGamma(*self.param_lamda).expand([self.d]))
+#             l = numpyro.param('beta_centered', jnp.ones(self.d) * .5, constraint=dist.constraints.interval(0, 1))
+#             beta = numpyro.sample('beta', dist.Normal(0., (lamda * tau) ** l))
+            
+#             logit = jnp.dot(self.X, (lamda * tau) ** (1-l) * beta)
+#             # p = expit(logit)
+#             p = jnp.clip(expit(logit), a_min=1e-6, a_max=1-1e-6)
+#             # id_print(jnp.min(p))
+#             with plate_obs:
+#                 numpyro.sample('obs', dist.Bernoulli(p), obs=y)
+
+#         # optim = jax.example_libraries.optimizers.adam(lr)
+#         guide = AutoDiagonalNormal(model, init_loc_fn=init_to_median, init_scale=.1)
+
+#         svi = SVI(model, guide, optim, Trace_ELBO(n_atoms))
+#         params = svi.run(rng_key, n_iter, self.y, progress_bar=False).params
+#         self.model_autocenter = numpyro.handlers.substitute(model, params)
+
+
+#     def initialize_model(self, rng_key, n_chain, autocenter=False): 
+
+#         (init_params, *_), self.potential_fn, *_ = initialize_model(
+#             rng_key, self.model_autocenter if autocenter else self.model, 
+#             model_kwargs={'y': self.y},
+#         )
+#         kchain = jax.random.split(rng_key, n_chain)
+#         flat, unravel_fn = jax.flatten_util.ravel_pytree(init_params)
+#         self.init_params = jax.vmap(lambda k: unravel_fn(jax.random.normal(k, flat.shape)))(kchain)
+
+#     def logprob_fn(self, params):
+#         return -self.potential_fn(params)
+
+
+class HorseshoeLogisticReg(Distribution):
+    def __init__(self, X, y) -> None:
         self.X = X
         self.y = y
-        self.n, self.d = X.shape
-        self.param_tau = jnp.array([alpha_a, alpha_b])
-        self.param_lamda = jnp.array([beta_a, beta_b])
 
-    def model(self, y=None): 
-        plate_obs = numpyro.plate('i', self.n, dim=-1)
-        plate_reg = numpyro.plate('j', self.d, dim=-1)
-        
-        # tau = numpyro.sample('tau', dist.HalfCauchy(1.))
-        # tau = numpyro.sample('tau', dist.LogNormal(0., 1.))
-        tau = numpyro.sample('tau', dist.Gamma(*self.param_tau))
-        
-        with plate_reg:
-            # lamda = numpyro.sample('lamda', dist.HalfCauchy(1.))
-            # lamda = numpyro.sample('lamda', dist.LogNormal(0., 1.))
-            lamda = numpyro.sample('lamda', dist.Gamma(*self.param_lamda))
+    def initialize_model(self, rng_key, n_chain):
+        kb, kl, kt = jax.random.split(rng_key, 3)
+        self.init_params = {
+            'beta': jax.random.normal(kb, (n_chain, self.X.shape[1])),
+            'lamda': jax.random.normal(kl, (n_chain, self.X.shape[1])),
+            'tau': jax.random.normal(kt, (n_chain,)),
+        }
 
-            beta = numpyro.sample('beta', dist.Normal(0., 1.)) #noncentered
-            # beta = numpyro.sample('beta', dist.Normal(0., tau * lamda)) #centered
-            
-        logit = jnp.sum(self.X * (tau * beta * lamda), axis=1) #noncentered
-        # logit = jnp.sum(self.X * beta, axis=1) #centered
+    def logprob(self, beta, lamda, tau): #non-centered
+        #priors
+        lprob = jnp.sum(
+            norm.logpdf(beta, loc=0., scale=1.) +
+            gamma.logpdf(jnp.exp(lamda), a=.5, loc=0., scale=2.) + lamda
+        ) + gamma.logpdf(jnp.exp(tau), a=.5, loc=0., scale=2.) + tau
+        #likelihood
+        logit = jnp.sum(self.X * (jnp.exp(tau) * beta * jnp.exp(lamda)), axis=1)
         p = jnp.clip(expit(logit), a_min=1e-6, a_max=1-1e-6)
-        # p = expit(logit)
-        with plate_obs:
-            numpyro.sample('obs', dist.Bernoulli(p), obs=y)
-
-    def center_model(self, rng_key, optim, n_atoms, n_iter):
-        def model(y=None):
-            plate_obs = numpyro.plate('i', self.n, dim=-1)
-            plate_reg = numpyro.plate('j', self.d, dim=-1)
-            
-            tau = numpyro.sample('tau', dist.InverseGamma(*self.param_tau))
-
-            lamda = numpyro.sample('lamda', dist.InverseGamma(*self.param_lamda).expand([self.d]))
-            l = numpyro.param('beta_centered', jnp.ones(self.d) * .5, constraint=dist.constraints.interval(0, 1))
-            beta = numpyro.sample('beta', dist.Normal(0., (lamda * tau) ** l))
-            
-            logit = jnp.dot(self.X, (lamda * tau) ** (1-l) * beta)
-            # p = expit(logit)
-            p = jnp.clip(expit(logit), a_min=1e-6, a_max=1-1e-6)
-            # id_print(jnp.min(p))
-            with plate_obs:
-                numpyro.sample('obs', dist.Bernoulli(p), obs=y)
-
-        # optim = jax.example_libraries.optimizers.adam(lr)
-        guide = AutoDiagonalNormal(model, init_loc_fn=init_to_median, init_scale=.1)
-
-        svi = SVI(model, guide, optim, Trace_ELBO(n_atoms))
-        params = svi.run(rng_key, n_iter, self.y, progress_bar=False).params
-        self.model_autocenter = numpyro.handlers.substitute(model, params)
+        # p = jsp.special.expit(logit)
+        lprob += jnp.sum(bernoulli.logpmf(self.y, p))
+        return lprob
 
 
-    def initialize_model(self, rng_key, n_chain, autocenter=False): 
+class ProbitReg(Distribution):
+    def __init__(self, X, y):
+        self.X = X
+        self.y = y
 
-        (init_params, *_), self.potential_fn, *_ = initialize_model(
-            rng_key, self.model_autocenter if autocenter else self.model, 
-            model_kwargs={'y': self.y},
-        )
-        kchain = jax.random.split(rng_key, n_chain)
-        flat, unravel_fn = jax.flatten_util.ravel_pytree(init_params)
-        self.init_params = jax.vmap(lambda k: unravel_fn(jax.random.normal(k, flat.shape)))(kchain)
+    def logprob(self, beta):
+        lprob = jnp.sum(norm.logpdf(beta, loc=1., scale=1.))
+        p = norm.cdf(self.X @ beta)
+        p = jnp.clip(p, a_min=1e-6, a_max=1-1e-6)
+        lprob += jnp.sum(bernoulli.logpmf(self.y, p))
+        return lprob
 
-    def logprob_fn(self, params):
-        return -self.potential_fn(params)
-
-        # kb, kl, kt = jax.random.split(rng_key, 3)
-        # self.init_param = {
-        #     'beta': jax.random.normal(kb, (n_chain, self.X.shape[1])),
-        #     'lamda': jax.random.normal(kl, (n_chain, self.X.shape[1])),
-        #     'tau': jax.random.normal(kt, (n_chain,)),
-        # }
-
-    # def logprob(self, beta, lamda, tau): #non-centered
-    #     #priors
-    #     lprob = jnp.sum(
-    #         norm.logpdf(beta, loc=0., scale=1.) +
-    #         gamma.logpdf(jnp.exp(lamda), a=.5, loc=0., scale=2.) + lamda
-    #     ) + gamma.logpdf(jnp.exp(tau), a=.5, loc=0., scale=2.) + tau
-    #     #likelihood
-    #     logit = jnp.sum(self.X * (jnp.exp(tau) * beta * jnp.exp(lamda)), axis=1)
-    #     p = jnp.clip(expit(logit), a_min=1e-6, a_max=1-1e-6)
-    #     # p = jsp.special.expit(logit)
-    #     lprob += jnp.sum(bernoulli.logpmf(self.y, p))
-    #     return lprob
-
-    # def logprob_fn(self, params):
-    #     return self.logprob(**params)
-    
-    # def potential_fn(self, params):
-    #     return -self.logprob(**params)
+    def initialize_model(self, rng_key, n_chain):
+        self.init_params = {
+            'beta': jax.random.normal(rng_key, (n_chain, self.X.shape[1])),
+        }
 
 
 class PredatorPrey:
@@ -226,6 +260,7 @@ class PredatorPrey:
             dist.TruncatedNormal(low=0., loc=self.param_mean, scale=self.param_scale)
             # dist.LogNormal(loc=self.param_mean, scale=self.param_scale)
         )
+
         ts = jnp.arange(float(self.time.shape[0]))
         # id_print(param)
         pp = odeint(dpp_dt, pp_init, ts, *param, 
@@ -239,10 +274,11 @@ class PredatorPrey:
         # solver = diffrax.Dopri5()
         # # solver = diffrax.Tsit5()
         # # solver = diffrax.Dopri8()
-        # id_print(pp_init)
-        # id_print(param)
+        # # id_print(pp_init)
+        # # id_print(param)
         # pp = diffrax.diffeqsolve(term, solver, t0=0, t1=self.time.shape[0], dt0=1, y0=pp_init, args=param).ys
         # pp = jnp.clip(pp, a_min=1e-6)
+
         # id_print(jnp.min(pp))
         # id_print(jnp.max(pp))
         # pp = simple_euler(pp_init, self.time.shape[0], *param)
@@ -264,9 +300,13 @@ class PredatorPrey:
     #     return -self.potential_fn(params)
 
         self.init_params = {
-            name: jax.random.normal(k, shape=(n_chain,)) * .1 for name, k in zip(
+            name: mean + scale * jax.random.normal(k, shape=(n_chain,)) #* .1 
+                for name, k, mean, scale in zip(
                 ['lalpha', 'lbeta', 'lgamma', 'ldelta', 'lsd_pred', 'lsd_prey', 'lpred_init', 'lprey_init'],
-                jax.random.split(rng_key, 8)
+                jax.random.split(rng_key, 8), 
+                [0.] * 8, [1.] * 8
+                # [-.9, -3.18, -3.53, -0.16, 3.43, 3.26, 0.11, -0.27], 
+                # [.28, .34, .34, .25, .26, .41, .09, .15]
             )
         }
 
@@ -287,21 +327,24 @@ class PredatorPrey:
         init_norm = (lxy_init - self.init_mean) / self.init_scale
         xy_init = jnp.exp(lxy_init)
 
-        # ts = jnp.arange(float(self.time.shape[0]))
-        # xy = odeint(dpp_dt, 
-        #     xy_init, ts, *param,
-        #     rtol=1e-6, atol=1e-5, 
-        #     mxstep=1000,
-        # )
-        # xy = jnp.clip(xy, a_min=1e-6)
-        term = diffrax.ODETerm(dxy_dt)
-        # solver = diffrax.Dopri5()
-        solver = diffrax.Tsit5()
-        # solver = diffrax.Dopri8()
-        # id_print(xy_init)
-        # id_print(param)
-        xy = diffrax.diffeqsolve(term, solver, t0=0, t1=self.time.shape[0], dt0=1, y0=xy_init, args=param).ys
+        ts = jnp.arange(1, float(self.time.shape[0]))
+        xy = odeint(dpp_dt, 
+            xy_init, ts, *param,
+            rtol=1e-6, atol=1e-5, 
+            mxstep=1000,
+        )
         xy = jnp.clip(xy, a_min=1e-6)
+        xy = jnp.concatenate([xy_init.reshape(1, 2), xy], axis=0)
+
+        # term = diffrax.ODETerm(dxy_dt)
+        # # solver = diffrax.Dopri5()
+        # solver = diffrax.Tsit5()
+        # # solver = diffrax.Dopri8()
+        # # id_print(xy_init)
+        # # id_print(param)
+        # xy = diffrax.diffeqsolve(term, solver, t0=0, t1=self.time.shape[0], dt0=1, y0=xy_init, args=param).ys
+        # xy = jnp.clip(xy, a_min=1e-6)
+        
         logdata_norm = (jnp.log(self.data) - jnp.log(xy)) / sd
         return (
             -.5 * jnp.dot(logsd_norm, logsd_norm) #- jnp.sum(sd) #lognormal sd
@@ -322,20 +365,6 @@ class PredatorPrey:
     #     return -self.logprob(**params)
 
 
-class Distribution(metaclass=abc.ABCMeta):
-
-    @abc.abstractmethod
-    def logprob(self, x1, x2):
-        """defines the log probability function"""
-
-    def logprob_fn(self, x):
-        return self.logprob(**x)
-
-    @abc.abstractmethod
-    def initialize_model(self, rng_key, n_chain):
-        """defines the initialization of paramters"""
-
-
 # class BiDistribution(metaclass=abc.ABCMeta):
 class BiDistribution(Distribution):
 
@@ -353,11 +382,31 @@ class BiDistribution(Distribution):
             'x2': jax.random.normal(ki2, shape=(n_chain,))
         }
 
+class BioOxygen(Distribution):
+
+    def __init__(self, times, obs, var) -> None:
+        self._times = times
+        self._obs = obs
+        self._var = var
+        super().__init__()
+
+    def initialize_model(self, rng_key, n_chain):
+        ki1, ki2 = jax.random.split(rng_key)
+        self.init_params = {
+            'x1': jax.random.normal(ki1, shape=(n_chain,)), 
+            'x2': jax.random.normal(ki2, shape=(n_chain,))
+        }
+
+    def logprob(self, x1, x2):
+        return -.5 / self._var * jnp.sum((x1 * (1. - jnp.exp(-x2 * self._times)) - self._obs) ** 2)
+
+
 class Banana(BiDistribution):
     def logprob(self, x1, x2):
-        return norm.logpdf(x1, 0.0, jnp.sqrt(8.0)) + norm.logpdf(
-            x2, 1 / 4 * x1**2, 1.0
-        )
+        # return norm.logpdf(x1, 0.0, jnp.sqrt(8.0)) + norm.logpdf(
+        #     x2, 1 / 4 * x1**2, 1.0
+        # )
+        return norm.logpdf(x1, 1.0, 1.0) + norm.logpdf(x2, -1.0, 1.0)
 
 # class NealsFunnel(BiDistribution):
 class NealsFunnel(Distribution):

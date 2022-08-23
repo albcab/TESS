@@ -1,3 +1,4 @@
+import abc
 from typing import Callable, Sequence, Tuple
 
 import jax.numpy as jnp
@@ -8,28 +9,13 @@ from jax.experimental.host_callback import id_print
 import haiku as hk
 import distrax as dx
 
-from nn_utils import affine_iaf_masks, MaskedLinear, Autoregressive
-
 
 def affine_coupling(params):
     return dx.ScalarAffine(shift=params[0], log_scale=params[1])
 
 def rquad_spline_coupling(params):
     return dx.RationalQuadraticSpline(
-        params, range_min=-4., range_max=4.)
-
-
-def make_iaf(d, n_hidden, non_linearity):
-    masks = affine_iaf_masks(d, n_hidden)
-    layers = []
-    for mask in masks[:-1]:
-        layers.append(MaskedLinear(mask, 
-            w_init=hk.initializers.VarianceScaling(.01), b_init=hk.initializers.RandomNormal(.01)))
-        layers.append(non_linearity)
-    layers.append(MaskedLinear(masks[-1], 
-        w_init=hk.initializers.VarianceScaling(.01), b_init=hk.initializers.RandomNormal(.01)))
-    layers.append(hk.Reshape((2, d), preserve_dims=-1))
-    return hk.Sequential(layers)
+        params, range_min=-6., range_max=6.)
 
         
 def make_dense(d, hidden_dims, norm, non_linearity, num_bins):
@@ -48,8 +34,8 @@ def make_dense(d, hidden_dims, norm, non_linearity, num_bins):
     #     ])
     # return hk.Sequential(layers)
     layers = []
-    for hd in hidden_dims:
-        layers.append(hk.Linear(hd, w_init=hk.initializers.VarianceScaling(.01), b_init=hk.initializers.RandomNormal(.01)))
+    for _ in range(hidden_dims):
+        layers.append(hk.Linear(d, w_init=hk.initializers.VarianceScaling(.01), b_init=hk.initializers.RandomNormal(.01)))
         if norm:
             layers.append(hk.LayerNorm(-1, True, True))
         layers.append(non_linearity)
@@ -65,131 +51,75 @@ def make_dense(d, hidden_dims, norm, non_linearity, num_bins):
     return hk.Sequential(layers)
 
 
-class coupling_auto:
-    def __new__(cls,
+class Flow(metaclass=abc.ABCMeta):
+
+    @abc.abstractmethod
+    def flows(self):
+        pass
+    
+    def get_utilities(self):
+        forward_and_log_det = hk.transform(lambda u: self.flows().forward_and_log_det(u))
+        inverse_and_log_det = hk.transform(lambda x: self.flows().inverse_and_log_det(x))
+
+        def flow(u, param):
+            u, unravel_fn = ravel_pytree(u)
+            x, ldj = forward_and_log_det.apply(param, None, u)
+            return unravel_fn(x), ldj
+        
+        def flow_inv(x, param):
+            x, unravel_fn = ravel_pytree(x)
+            u, ldj = inverse_and_log_det.apply(param, None, x)
+            return unravel_fn(u), ldj
+
+        return forward_and_log_det.init, flow, flow_inv
+
+
+class Coupling(Flow):
+    
+    def __init__(self,
         # coupling_fn: Callable,
         d: int, n_flow: int,
-        hidden_dims: Sequence[int], non_linearity: Callable, norm: bool,
+        hidden_dims: int, non_linearity: Callable, norm: bool,
         num_bins: int = None,
-    ) -> Tuple:
-        
+    ):
         if num_bins:
-            coupling_fn = rquad_spline_coupling
+            self.coupling_fn = rquad_spline_coupling
         else:
-            coupling_fn = affine_coupling
+            self.coupling_fn = affine_coupling
+        self.split = int(d/2 + .5)
+        self.d = d
+        self.n_flow = n_flow
+        self.hidden_dims = hidden_dims
+        self.non_linearity = non_linearity
+        self.norm = norm
+        self.num_bins = num_bins
 
-        split = int(d/2 + .5)
-        def flows():
-            flows = []
-            if num_bins:
-                lin = hk.Sequential([hk.Linear(2 * d, w_init=jnp.zeros, b_init=hk.initializers.RandomNormal(.1)), hk.Reshape((2, d), preserve_dims=-1)])
-                flows.append(dx.MaskedCoupling(jnp.zeros(d).astype(bool), lin, affine_coupling))
-            for _ in range(n_flow):
-                encoder = make_dense(split, hidden_dims, norm, non_linearity, num_bins)
-                flows.append(dx.SplitCoupling(split, 1, encoder, coupling_fn, swap=True))
-                decoder = make_dense(d - split, hidden_dims, norm, non_linearity, num_bins)
-                flows.append(dx.SplitCoupling(split, 1, decoder, coupling_fn, swap=False))
-            if num_bins:
-                lin = hk.Sequential([hk.Linear(2 * d, w_init=jnp.zeros, b_init=hk.initializers.RandomNormal(.1)), hk.Reshape((2, d), preserve_dims=-1)])
-                flows.append(dx.MaskedCoupling(jnp.zeros(d).astype(bool), lin, affine_coupling))
-            return dx.Chain(flows)
-
-        forward_and_log_det = hk.transform(lambda u: flows().forward_and_log_det(u))
-        inverse_and_log_det = hk.transform(lambda x: flows().inverse_and_log_det(x))
-
-        def flow(u, v, param, rng=None):
-            u, unravel_fn = ravel_pytree(u)
-            x, ldj = forward_and_log_det.apply(param, rng, u)
-            return unravel_fn(x), v, ldj
-        
-        def flow_inv(x, v, param, rng=None):
-            x, unravel_fn = ravel_pytree(x)
-            u, ldj = inverse_and_log_det.apply(param, rng, x)
-            return unravel_fn(u), v, ldj
-
-        return forward_and_log_det.init, flow, flow_inv
+    def flows(self):
+        flows = []
+        if self.num_bins:
+            flows.append(shift_scale(self.d))
+        for _ in range(self.n_flow):
+            encoder = make_dense(self.split, self.hidden_dims, self.norm, self.non_linearity, self.num_bins)
+            flows.append(dx.SplitCoupling(self.split, 1, encoder, self.coupling_fn, swap=True))
+            decoder = make_dense(self.d - self.split, self.hidden_dims, self.norm, self.non_linearity, self.num_bins)
+            flows.append(dx.SplitCoupling(self.split, 1, decoder, self.coupling_fn, swap=False))
+        if self.num_bins:
+            flows.append(shift_scale(self.d))
+        return dx.Chain(flows)
 
 
-class inverse_autoreg:
-    def __new__(cls,
-        # coupling_fn: Callable, 
-        d: int, n_flow: int,
-        hidden_dims: Sequence[int], non_linearity: Callable, invert: bool,
-    ) -> Tuple:
+class ShiftScale(Flow):
 
-        print("BROKEN")
+    def __init__(self, d):
+        self.d = d
 
-        coupling_fn = affine_coupling
-
-        n_hidden = len(hidden_dims)
-        P = jnp.flip(jnp.eye(d), 1)
-        permute = lambda x: P @ x
-        ldj_fn = lambda x: 0.
-        def flows():
-            flows = []
-            for _ in range(n_flow):
-                conditioner = make_iaf(d, n_hidden, non_linearity)
-                flows.append(Autoregressive(d, conditioner, coupling_fn))
-                if invert:
-                    flows.append(dx.Lambda(permute, permute, ldj_fn, ldj_fn, 1, 1, True))
-            if invert:
-                flows.append(dx.Lambda(permute, permute, ldj_fn, ldj_fn, 1, 1, True))
-            return dx.Chain(flows)
-
-        forward_and_log_det = hk.transform(lambda u: flows().forward_and_log_det(u))
-        inverse_and_log_det = hk.transform(lambda x: flows().inverse_and_log_det(x))
-
-        def flow(u, v, param, rng=None):
-            u, unravel_fn = ravel_pytree(u)
-            x, ldj = forward_and_log_det.apply(param, rng, u)
-            return unravel_fn(x), v, ldj
-        
-        def flow_inv(x, v, param, rng=None):
-            x, unravel_fn = ravel_pytree(x)
-            u, ldj = inverse_and_log_det.apply(param, rng, x)
-            return unravel_fn(u), v, ldj
-
-        return forward_and_log_det.init, flow, flow_inv
+    def flows(self):
+        return shift_scale(self.d)
 
 
-class coupling_latent:
-    def __new__(cls,
-        # coupling_fn: Callable, 
-        d: int, n_flow: int,
-        hidden_dims: Sequence[int], non_linearity: Callable, norm: bool,
-        num_bins: int = None,
-    ) -> Tuple:
-
-        if num_bins:
-            coupling_fn = rquad_spline_coupling
-        else:
-            coupling_fn = affine_coupling
-        
-        def flows():
-            flows = []
-            for _ in range(n_flow):
-                encoder = make_dense(d, hidden_dims, norm, non_linearity, num_bins)
-                flows.append(dx.SplitCoupling(d, 1, encoder, coupling_fn, True))
-                decoder = make_dense(d, hidden_dims, norm, non_linearity, num_bins)
-                flows.append(dx.SplitCoupling(d, 1, decoder, coupling_fn, False))
-            # if num_bins:
-            #     flows.append() something that scales the transformation to the scale and bias of target
-            return dx.Chain(flows)
-
-        forward_and_log_det = hk.transform(lambda uv: flows().forward_and_log_det(uv))
-        inverse_and_log_det = hk.transform(lambda xv: flows().inverse_and_log_det(xv))
-
-        def param_init(rng, p):
-            return forward_and_log_det.init(rng, jnp.concatenate([p, p]))
-
-        def flow(u, v, param, rng=None):
-            u, unravel_fn = ravel_pytree(u)
-            xv, ldj = forward_and_log_det.apply(param, rng, jnp.concatenate([u, v]))
-            return unravel_fn(xv.at[:d].get()), xv.at[-d:].get(), ldj
-        
-        def flow_inv(x, v, param, rng=None):
-            x, unravel_fn = ravel_pytree(x)
-            uv, ldj = inverse_and_log_det.apply(param, rng, jnp.concatenate([x, v]))
-            return unravel_fn(uv.at[:d].get()), uv.at[-d:].get(), ldj
-
-        return param_init, flow, flow_inv
+def shift_scale(d):
+    lin = hk.Sequential([
+        hk.Linear(2 * d, w_init=jnp.zeros, b_init=hk.initializers.RandomNormal(.1)), 
+        hk.Reshape((2, d), preserve_dims=-1)
+    ])
+    return dx.MaskedCoupling(jnp.zeros(d).astype(bool), lin, affine_coupling)

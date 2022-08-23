@@ -2,13 +2,13 @@ import argparse
 import os
 # os.environ['XLA_FLAGS'] = '--xla_force_host_platform_device_count=10'
 
-import pandas as pd
-
 import jax
+import jax.numpy as jnp
+import jax.random as jrnd
 # print(jax.devices())
 import optax
 
-from distributions import RegimeSwitchHMM
+from distributions import BioOxygen
 from execute import full_run, run
 
 from jax.config import config
@@ -16,19 +16,21 @@ from jax.config import config
 config.update("jax_enable_x64", True)
 
 
-N_PARAM = 9
+N_PARAM = 2
 
 def main(args):
 
-    print("Loading Google stock data...")
-    data = pd.read_csv('google.csv')
-    y = data.dl_ac.values * 100
-    # print(y)
-    T, _ = data.shape
-    # y = jrnd.normal(jrnd.PRNGKey(0), (T,))
-    
-    print("Setting up Regime switching hidden Markov model...")
-    dist = RegimeSwitchHMM(T, y)
+    print("Generating synthetic data...")
+    N = 20
+    theta0 = 1.
+    theta1 = .1
+    var = 2 * 10 ** (-4)
+    times = jnp.arange(1, 5, 4/N)
+    std_norms = jrnd.normal(jrnd.PRNGKey(args.seed), (N,))
+    obs = theta0 * (1. - jnp.exp(-theta1 * times)) + jnp.sqrt(var) * std_norms
+
+    print("Setting up Biochemical oxygen demand density...")
+    dist = BioOxygen(times, obs, var)
 
     [n_warm, n_iter] = args.sampling_param
     schedule = optax.exponential_decay(init_value=1e-2,
@@ -37,7 +39,7 @@ def main(args):
 
     run(dist, args, optim, N_PARAM, batch_fn=jax.vmap)
 
-    # jnp.savez(f'googlestock_{flow}_{distance}_{non_lin}_{n_epochs}.npz', 
+    # jnp.savez(f'banana_{flow}_{distance}_{non_lin}_{n_epochs}.npz', 
     #     ess_samples=ess_samples, nuts_samples=nuts_samples,
     #     atess_samples=atess_samples, atess_flow_samples=atess_flow_samples,
     #     neutra_samples=neutra_samples, neutra_flow_samples=neutra_flow_samples,
@@ -55,10 +57,10 @@ if __name__ == "__main__":
     parser.add_argument('-nf', '--n-flow', type=int, default=2)
     parser.add_argument('-nb', '--num-bins', type=int, default=None)
     parser.add_argument(
-        "-s", "--sampling-param", type=int, nargs=3,
+        "-s", "--sampling-param", type=int, nargs=2,
         help="Sampling parameters [n_warm, n_iter]",
         default=[400, 100]
     )
-    parser.add_argument('-np', '--preconditon_iter', type=int, default=100)
+    parser.add_argument('-np', '--preconditon_iter', type=int, default=400)
     args = parser.parse_args()
     main(args)
