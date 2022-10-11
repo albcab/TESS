@@ -1,15 +1,12 @@
 import argparse
-import os
-# os.environ['XLA_FLAGS'] = '--xla_force_host_platform_device_count=10'
 
 import pandas as pd
 
 import jax
-# print(jax.devices())
 import optax
 
 from distributions import RegimeSwitchHMM
-from execute import full_run, run
+from execute import run
 
 from jax.config import config
 # config.update("jax_debug_nans", True)
@@ -23,9 +20,7 @@ def main(args):
     print("Loading Google stock data...")
     data = pd.read_csv('google.csv')
     y = data.dl_ac.values * 100
-    # print(y)
     T, _ = data.shape
-    # y = jrnd.normal(jrnd.PRNGKey(0), (T,))
     
     print("Setting up Regime switching hidden Markov model...")
     dist = RegimeSwitchHMM(T, y)
@@ -37,11 +32,6 @@ def main(args):
 
     run(dist, args, optim, N_PARAM, batch_fn=jax.vmap)
 
-    # jnp.savez(f'googlestock_{flow}_{distance}_{non_lin}_{n_epochs}.npz', 
-    #     ess_samples=ess_samples, nuts_samples=nuts_samples,
-    #     atess_samples=atess_samples, atess_flow_samples=atess_flow_samples,
-    #     neutra_samples=neutra_samples, neutra_flow_samples=neutra_flow_samples,
-    # )
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -60,5 +50,7 @@ if __name__ == "__main__":
         default=[400, 100]
     )
     parser.add_argument('-np', '--preconditon_iter', type=int, default=100)
+    parser.add_argument('-s1', '--init_step_size', type=float, default=None)
+    parser.add_argument('-s2', '--p_init_step_size', type=float, default=None)
     args = parser.parse_args()
     main(args)

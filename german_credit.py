@@ -1,16 +1,13 @@
 import argparse
-import os
-# os.environ['XLA_FLAGS'] = '--xla_force_host_platform_device_count=10'
 
 import pandas as pd
 import numpy as np
 
 import jax
-# print(jax.devices())
 import optax
 
 from distributions import HorseshoeLogisticReg, ProbitReg
-from execute import full_run, run
+from execute import run
 
 from jax.config import config
 # config.update("jax_debug_nans", True)
@@ -28,17 +25,6 @@ def main(args):
     X = np.concatenate([np.ones((1000, 1)), X], axis=1)
     N_OBS, N_REG = X.shape
 
-    # [n_warm, n_iter] = args.sampling_param
-    # schedule = optax.exponential_decay(init_value=1e-2,
-    #     transition_steps=n_warm-10, decay_rate=.1, transition_begin=10)
-    # optim = optax.adam(schedule)
-
-    # N_PARAM = N_REG
-    # print("\n\nSetting up German credit probit regression model...")
-    # dist = ProbitReg(X, y)
-
-    # run(dist, args, optim, N_PARAM, batch_fn=jax.vmap)
-
     [n_warm, n_iter] = args.sampling_param
     schedule = optax.exponential_decay(init_value=2.5e-3,
         transition_steps=n_warm-10, decay_rate=.1, transition_begin=10)
@@ -50,11 +36,6 @@ def main(args):
 
     run(dist, args, optim, N_PARAM, batch_fn=jax.vmap)
 
-    # jnp.savez(f'germancredit_{flow}_{distance}_{non_lin}_{n_epochs}.npz', 
-    #     ess_samples=ess_samples, nuts_samples=nuts_samples,
-    #     atess_samples=atess_samples, atess_flow_samples=atess_flow_samples,
-    #     neutra_samples=neutra_samples, neutra_flow_samples=neutra_flow_samples,
-    # )
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -73,5 +54,7 @@ if __name__ == "__main__":
         default=[400, 100]
     )
     parser.add_argument('-np', '--preconditon_iter', type=int, default=400)
+    parser.add_argument('-s1', '--init_step_size', type=float, default=None)
+    parser.add_argument('-s2', '--p_init_step_size', type=float, default=0.1)
     args = parser.parse_args()
     main(args)

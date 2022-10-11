@@ -1,10 +1,9 @@
 import abc
-from typing import Callable, Sequence, Tuple
+from typing import Callable
 
 import jax.numpy as jnp
 from jax.flatten_util import ravel_pytree
 
-from jax.experimental.host_callback import id_print
 
 import haiku as hk
 import distrax as dx
@@ -19,20 +18,6 @@ def rquad_spline_coupling(params):
 
         
 def make_dense(d, hidden_dims, norm, non_linearity, num_bins):
-    # layers = [hk.nets.MLP(hidden_dims, 
-    #     w_init=hk.initializers.VarianceScaling(.01), b_init=hk.initializers.RandomNormal(.01), 
-    #     activation=non_linearity, activate_final=True)
-    # ]
-    # if num_bins:
-    #     layers.append(
-    #         hk.Linear(3 * num_bins + 1, w_init=hk.initializers.VarianceScaling(.01), b_init=hk.initializers.RandomNormal(.01))
-    #     )
-    # else:
-    #     layers.extend([
-    #         hk.Linear(2 * d, w_init=hk.initializers.VarianceScaling(.01), b_init=hk.initializers.RandomNormal(.01)),
-    #         hk.Reshape((2, d), preserve_dims=-1)
-    #     ])
-    # return hk.Sequential(layers)
     layers = []
     for _ in range(hidden_dims):
         layers.append(hk.Linear(d, w_init=hk.initializers.VarianceScaling(.01), b_init=hk.initializers.RandomNormal(.01)))
@@ -77,7 +62,6 @@ class Flow(metaclass=abc.ABCMeta):
 class Coupling(Flow):
     
     def __init__(self,
-        # coupling_fn: Callable,
         d: int, n_flow: int,
         hidden_dims: int, non_linearity: Callable, norm: bool,
         num_bins: int = None,

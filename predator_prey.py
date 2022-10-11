@@ -1,15 +1,15 @@
 import argparse
-import os
-# os.environ['XLA_FLAGS'] = '--xla_force_host_platform_device_count=10'
 
 import pandas as pd
 
 import jax
-# print(jax.devices())
 import optax
 
 from distributions import PredatorPrey
-from execute import full_run, run
+from execute import run
+
+from numpyro.util import enable_x64
+enable_x64(use_x64=True)
 
 from jax.config import config
 # config.update("jax_debug_nans", True)
@@ -23,8 +23,7 @@ def main(args):
     print("Loading predator-prey data...")
     data = pd.read_table("lynxhare.txt", sep=" ", names=['year', 'prey', 'pred', ''])
     # data = data.loc[data.year >= 1920]
-    # print(data)
-    
+
     print("Setting up predator-prey model...")
     dist = PredatorPrey(
         data.year.values, data.pred.values, data.prey.values,
@@ -37,11 +36,6 @@ def main(args):
 
     run(dist, args, optim, N_PARAM, batch_fn=jax.vmap)
 
-    # jnp.savez(f'predatorprey_{flow}_{distance}_{non_lin}_{n_epochs}.npz', 
-    #     ess_samples=ess_samples, nuts_samples=nuts_samples,
-    #     atess_samples=atess_samples, atess_flow_samples=atess_flow_samples,
-    #     neutra_samples=neutra_samples, neutra_flow_samples=neutra_flow_samples,
-    # )
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -59,6 +53,8 @@ if __name__ == "__main__":
         help="Sampling parameters [n_warm, n_iter]",
         default=[400, 100]
     )
-    parser.add_argument('-np', '--preconditon_iter', type=int, default=100)
+    parser.add_argument('-np', '--preconditon_iter', type=int, default=400)
+    parser.add_argument('-s1', '--init_step_size', type=float, default=None)
+    parser.add_argument('-s2', '--p_init_step_size', type=float, default=None)
     args = parser.parse_args()
     main(args)
